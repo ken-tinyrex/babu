@@ -24,6 +24,32 @@ interface Section {
   items: BaseItemDto[];
 }
 
+function ItemCard({
+  item,
+  serverUrl,
+  token,
+  onPress,
+}: {
+  item: BaseItemDto;
+  serverUrl: string;
+  token: string;
+  onPress: () => void;
+}) {
+  const thumbUrl = getImageUrl(serverUrl, item.Id!, token, 400, 'Thumb');
+  const backdropUrl = getImageUrl(serverUrl, item.Id!, token, 400, 'Backdrop');
+  const [imgUri, setImgUri] = useState(thumbUrl);
+  return (
+    <TouchableOpacity style={styles.card} onPress={onPress}>
+      <Image
+        source={{ uri: imgUri }}
+        style={styles.poster}
+        onError={() => imgUri === thumbUrl && setImgUri(backdropUrl)}
+      />
+      <Text style={styles.cardTitle} numberOfLines={1}>{item.Name}</Text>
+    </TouchableOpacity>
+  );
+}
+
 export default function HomeScreen({ navigation }: Props) {
   const { serverUrl, token, userId, logout } = useAuth();
   const [sections, setSections] = useState<Section[]>([]);
@@ -44,8 +70,7 @@ export default function HomeScreen({ navigation }: Props) {
               limit: 20,
               sortBy: ['DateCreated'],
               sortOrder: ['Descending'],
-              recursive: true,
-              includeItemTypes: ['Movie', 'Series', 'Episode', 'Audio'],
+              includeItemTypes: ['Movie', 'Series', 'Folder', 'Video', 'Audio', 'MusicVideo', 'BoxSet'],
             });
             return { library: lib, items: data.Items ?? [] };
           })
@@ -61,21 +86,6 @@ export default function HomeScreen({ navigation }: Props) {
     load();
   }, [serverUrl, token, userId]);
 
-  function renderItem(item: BaseItemDto) {
-    const imageUrl = getImageUrl(serverUrl, item.Id!, token);
-    return (
-      <TouchableOpacity
-        key={item.Id}
-        style={styles.card}
-        onPress={() => navigation.navigate('Detail', { itemId: item.Id! })}
-      >
-        <Image source={{ uri: imageUrl }} style={styles.poster} />
-        <Text style={styles.cardTitle} numberOfLines={1}>
-          {item.Name}
-        </Text>
-      </TouchableOpacity>
-    );
-  }
 
   if (loading) {
     return (
@@ -103,7 +113,15 @@ export default function HomeScreen({ navigation }: Props) {
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.row}
             >
-              {items.map(renderItem)}
+              {items.map((item) => (
+                <ItemCard
+                  key={item.Id}
+                  item={item}
+                  serverUrl={serverUrl}
+                  token={token}
+                  onPress={() => navigation.navigate('Detail', { itemId: item.Id! })}
+                />
+              ))}
             </ScrollView>
           </View>
         ))}
@@ -138,10 +156,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   row: { paddingHorizontal: 10 },
-  card: { width: 120, marginHorizontal: 6 },
+  card: { width: 200, marginHorizontal: 6 },
   poster: {
-    width: 120,
-    height: 180,
+    width: 200,
+    height: 113,
     borderRadius: 8,
     backgroundColor: '#1A1A1A',
   },

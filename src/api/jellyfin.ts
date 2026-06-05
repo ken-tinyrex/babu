@@ -13,8 +13,16 @@ export function createApi(serverUrl: string, token?: string) {
   return api;
 }
 
-export function getImageUrl(serverUrl: string, itemId: string, token: string, width = 400) {
-  return `${serverUrl}/Items/${itemId}/Images/Primary?api_key=${token}&maxWidth=${width}&quality=90`;
+export type JellyfinImageType = 'Primary' | 'Backdrop' | 'Thumb' | 'Screenshot' | 'Logo';
+
+export function getImageUrl(
+  serverUrl: string,
+  itemId: string,
+  token: string,
+  width = 400,
+  imageType: JellyfinImageType = 'Primary'
+) {
+  return `${serverUrl}/Items/${itemId}/Images/${imageType}?api_key=${token}&maxWidth=${width}&quality=90`;
 }
 
 export function getStreamUrl(serverUrl: string, itemId: string, token: string) {

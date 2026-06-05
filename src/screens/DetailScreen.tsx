@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { getUserLibraryApi } from '@jellyfin/sdk/lib/utils/api/user-library-api';
+import { getItemsApi } from '@jellyfin/sdk/lib/utils/api/items-api';
 import { BaseItemDto } from '@jellyfin/sdk/lib/generated-client';
 import { useAuth } from '../context/AuthContext';
 import { createApi, getImageUrl, getStreamUrl } from '../api/jellyfin';
@@ -18,13 +19,16 @@ import { RootStackParamList } from '../../App';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Detail'>;
 
-const STREAMABLE = new Set(['Movie', 'Episode', 'Audio', 'MusicVideo']);
+const STREAMABLE = new Set(['Movie', 'Episode', 'Audio', 'MusicVideo', 'Video']);
+const HAS_CHILDREN = new Set(['Series', 'Season', 'Folder', 'CollectionFolder']);
 
 export default function DetailScreen({ route, navigation }: Props) {
   const { itemId } = route.params;
   const { serverUrl, token, userId } = useAuth();
   const [item, setItem] = useState<BaseItemDto | null>(null);
+  const [children, setChildren] = useState<BaseItemDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const [heroImageType, setHeroImageType] = useState<'Backdrop' | 'Primary'>('Backdrop');
 
   useEffect(() => {
     async function load() {
@@ -32,6 +36,29 @@ export default function DetailScreen({ route, navigation }: Props) {
         const api = createApi(serverUrl, token);
         const { data } = await getUserLibraryApi(api).getItem({ userId, itemId });
         setItem(data);
+
+        if (HAS_CHILDREN.has(data.Type ?? '')) {
+          const params =
+            data.Type === 'Series'
+              ? {
+                  userId,
+                  seriesId: data.Id!,
+                  recursive: true,
+                  includeItemTypes: ['Episode'] as any,
+                  sortBy: ['ParentIndexNumber', 'IndexNumber'] as any,
+                  sortOrder: ['Ascending'] as any,
+                  limit: 200,
+                }
+              : {
+                  userId,
+                  parentId: data.Id!,
+                  sortBy: ['IndexNumber', 'Name'] as any,
+                  sortOrder: ['Ascending'] as any,
+                  limit: 200,
+                };
+          const { data: childData } = await getItemsApi(api).getItems(params);
+          setChildren(childData.Items ?? []);
+        }
       } catch (e) {
         console.error('DetailScreen load error:', e);
       } finally {
@@ -60,7 +87,7 @@ export default function DetailScreen({ route, navigation }: Props) {
     );
   }
 
-  const imageUrl = getImageUrl(serverUrl, item.Id!, token, 600);
+  const imageUrl = getImageUrl(serverUrl, item.Id!, token, 800, heroImageType);
   const canPlay = STREAMABLE.has(item.Type ?? '');
   const streamUrl = getStreamUrl(serverUrl, item.Id!, token);
 
@@ -78,7 +105,12 @@ export default function DetailScreen({ route, navigation }: Props) {
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
 
-        <Image source={{ uri: imageUrl }} style={styles.poster} resizeMode="cover" />
+        <Image
+          source={{ uri: imageUrl }}
+          style={styles.poster}
+          resizeMode="cover"
+          onError={() => heroImageType === 'Backdrop' && setHeroImageType('Primary')}
+        />
 
         <View style={styles.content}>
           <Text style={styles.title}>{item.Name}</Text>
@@ -112,6 +144,36 @@ export default function DetailScreen({ route, navigation }: Props) {
           {!!item.Overview && (
             <Text style={styles.overview}>{item.Overview}</Text>
           )}
+
+          {children.length > 0 && (
+            <View style={styles.episodesSection}>
+              <Text style={styles.episodesHeading}>Episodes</Text>
+              {children.map((ep) => {
+                const epThumb = getImageUrl(serverUrl, ep.Id!, token, 320, 'Primary');
+                const epStream = getStreamUrl(serverUrl, ep.Id!, token);
+                const epLabel =
+                  ep.IndexNumber != null
+                    ? `${ep.IndexNumber}. ${ep.Name}`
+                    : ep.Name ?? 'Untitled';
+                const canPlayEp = STREAMABLE.has(ep.Type ?? '');
+                return (
+                  <TouchableOpacity
+                    key={ep.Id}
+                    style={styles.episodeRow}
+                    onPress={() =>
+                      canPlayEp
+                        ? navigation.navigate('Player', { streamUrl: epStream, title: epLabel })
+                        : navigation.navigate('Detail', { itemId: ep.Id! })
+                    }
+                  >
+                    <Image source={{ uri: epThumb }} style={styles.epThumb} />
+                    <Text style={styles.epLabel} numberOfLines={2}>{epLabel}</Text>
+                    {canPlayEp && <Text style={styles.epPlay}>▶</Text>}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -131,7 +193,7 @@ const styles = StyleSheet.create({
   backLink: { color: '#00A4DC', fontSize: 14 },
   backButton: { padding: 16 },
   backText: { color: '#00A4DC', fontSize: 16 },
-  poster: { width: '100%', aspectRatio: 2 / 3, backgroundColor: '#1A1A1A' },
+  poster: { width: '100%', aspectRatio: 16 / 9, backgroundColor: '#1A1A1A' },
   content: { padding: 16 },
   title: { color: '#fff', fontSize: 24, fontWeight: '700', marginBottom: 10 },
   metaRow: {
@@ -159,4 +221,17 @@ const styles = StyleSheet.create({
   },
   playButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
   overview: { color: '#ccc', fontSize: 15, lineHeight: 24 },
+  episodesSection: { marginTop: 24 },
+  episodesHeading: { color: '#fff', fontSize: 18, fontWeight: '600', marginBottom: 12 },
+  episodeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: '#222',
+  },
+  epThumb: { width: 100, height: 56, borderRadius: 4, backgroundColor: '#1A1A1A' },
+  epLabel: { flex: 1, color: '#ddd', fontSize: 13 },
+  epPlay: { color: '#00A4DC', fontSize: 18, paddingHorizontal: 4 },
 });
