@@ -38,24 +38,13 @@ export default function DetailScreen({ route, navigation }: Props) {
         setItem(data);
 
         if (HAS_CHILDREN.has(data.Type ?? '')) {
-          const params =
-            data.Type === 'Series'
-              ? {
-                  userId,
-                  seriesId: data.Id!,
-                  recursive: true,
-                  includeItemTypes: ['Episode'] as any,
-                  sortBy: ['ParentIndexNumber', 'IndexNumber'] as any,
-                  sortOrder: ['Ascending'] as any,
-                  limit: 200,
-                }
-              : {
-                  userId,
-                  parentId: data.Id!,
-                  sortBy: ['IndexNumber', 'Name'] as any,
-                  sortOrder: ['Ascending'] as any,
-                  limit: 200,
-                };
+          const params = {
+            userId,
+            parentId: data.Id!,
+            sortBy: ['IndexNumber', 'SortName'] as any,
+            sortOrder: ['Ascending'] as any,
+            limit: 200,
+          };
           const { data: childData } = await getItemsApi(api).getItems(params);
           setChildren(childData.Items ?? []);
         }
