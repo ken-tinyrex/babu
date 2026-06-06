@@ -12,7 +12,7 @@ export type RootStackParamList = {
   Login: undefined;
   Home: undefined;
   Detail: { itemId: string };
-  Player: { streamUrl: string; title: string };
+  Player: { streamUrl: string; title: string; itemId: string; startPositionTicks?: number };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
