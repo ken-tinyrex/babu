@@ -25,6 +25,13 @@ export function getImageUrl(
   return `${serverUrl}/Items/${itemId}/Images/${imageType}?api_key=${token}&maxWidth=${width}&quality=90`;
 }
 
-export function getStreamUrl(serverUrl: string, itemId: string, token: string) {
-  return `${serverUrl}/Videos/${itemId}/stream?api_key=${token}&static=true&mediaSourceId=${itemId}`;
+export function getStreamUrl(
+  serverUrl: string,
+  itemId: string,
+  token: string,
+  mediaSourceId = itemId,
+  container?: string,
+) {
+  const ext = container ? `.${container}` : '';
+  return `${serverUrl}/Videos/${itemId}/stream${ext}?api_key=${token}&static=true&mediaSourceId=${mediaSourceId}`;
 }
