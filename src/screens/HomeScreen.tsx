@@ -12,7 +12,7 @@ import {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { getUserViewsApi } from '@jellyfin/sdk/lib/utils/api/user-views-api';
 import { getItemsApi } from '@jellyfin/sdk/lib/utils/api/items-api';
-import { BaseItemDto } from '@jellyfin/sdk/lib/generated-client';
+import { BaseItemDto, ItemFilter } from '@jellyfin/sdk/lib/generated-client';
 import { useAuth } from '../context/AuthContext';
 import { createApi, getImageUrl } from '../api/jellyfin';
 import { RootStackParamList } from '../../App';
@@ -23,6 +23,55 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 interface Section {
   library: BaseItemDto;
   items: BaseItemDto[];
+}
+
+function ContinueWatchingCard({
+  item,
+  serverUrl,
+  token,
+  onPress,
+}: {
+  item: BaseItemDto;
+  serverUrl: string;
+  token: string;
+  onPress: () => void;
+}) {
+  const imageSourceId = item.Type === 'Episode' && item.SeriesId ? item.SeriesId : item.Id!;
+  const thumbUrl = getImageUrl(serverUrl, imageSourceId, token, 400, 'Thumb');
+  const backdropUrl = getImageUrl(serverUrl, imageSourceId, token, 400, 'Backdrop');
+  const [imgUri, setImgUri] = useState(thumbUrl);
+
+  const progress =
+    item.RunTimeTicks && item.UserData?.PlaybackPositionTicks
+      ? Math.min(item.UserData.PlaybackPositionTicks / item.RunTimeTicks, 1)
+      : 0;
+
+  const title = item.Type === 'Episode' ? (item.SeriesName ?? item.Name) : item.Name;
+  const episodeLabel =
+    item.Type === 'Episode'
+      ? `S${String(item.ParentIndexNumber ?? 0).padStart(2, '0')}E${String(item.IndexNumber ?? 0).padStart(2, '0')}`
+      : null;
+
+  return (
+    <TouchableOpacity style={styles.card} onPress={onPress}>
+      <View>
+        <Image
+          source={{ uri: imgUri }}
+          style={styles.poster}
+          onError={() => imgUri === thumbUrl && setImgUri(backdropUrl)}
+        />
+        {progress > 0 && (
+          <View style={styles.progressTrack}>
+            <View style={[styles.progressFill, { width: `${progress * 100}%` as any }]} />
+          </View>
+        )}
+      </View>
+      <Text style={styles.cardTitle} numberOfLines={1}>{title}</Text>
+      {episodeLabel && (
+        <Text style={styles.cardSubtitle} numberOfLines={1}>{episodeLabel}</Text>
+      )}
+    </TouchableOpacity>
+  );
 }
 
 function ItemCard({
@@ -54,6 +103,7 @@ function ItemCard({
 export default function HomeScreen({ navigation }: Props) {
   const { serverUrl, token, userId, logout } = useAuth();
   const [sections, setSections] = useState<Section[]>([]);
+  const [continueWatching, setContinueWatching] = useState<BaseItemDto[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -62,6 +112,18 @@ export default function HomeScreen({ navigation }: Props) {
         const api = createApi(serverUrl, token);
         const { data: views } = await getUserViewsApi(api).getUserViews({ userId });
         const libraries = views.Items ?? [];
+
+        const { data: resumeData } = await getItemsApi(api).getItems({
+          userId,
+          filters: [ItemFilter.IsResumable],
+          limit: 12,
+          sortBy: ['DatePlayed'],
+          sortOrder: ['Descending'],
+          includeItemTypes: ['Movie', 'Episode'],
+          enableUserData: true,
+          recursive: true,
+        });
+        setContinueWatching(resumeData.Items ?? []);
 
         const sectionData = await Promise.all(
           libraries.map(async (lib) => {
@@ -112,6 +174,26 @@ export default function HomeScreen({ navigation }: Props) {
           userId={userId}
           onPress={(item) => navigation.navigate('Detail', { itemId: item.Id! })}
         />
+        {continueWatching.length > 0 && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Continue Watching</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.row}
+            >
+              {continueWatching.map((item) => (
+                <ContinueWatchingCard
+                  key={item.Id}
+                  item={item}
+                  serverUrl={serverUrl}
+                  token={token}
+                  onPress={() => navigation.navigate('Detail', { itemId: item.Id! })}
+                />
+              ))}
+            </ScrollView>
+          </View>
+        )}
         {sections.map(({ library, items }) => (
           <View key={library.Id} style={styles.section}>
             <Text style={styles.sectionTitle}>{library.Name}</Text>
@@ -171,4 +253,20 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A1A1A',
   },
   cardTitle: { color: '#aaa', fontSize: 12, marginTop: 6 },
+  cardSubtitle: { color: '#555', fontSize: 11, marginTop: 2 },
+  progressTrack: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderBottomLeftRadius: 8,
+    borderBottomRightRadius: 8,
+  },
+  progressFill: {
+    height: 3,
+    backgroundColor: '#00A4DC',
+    borderBottomLeftRadius: 8,
+  },
 });
