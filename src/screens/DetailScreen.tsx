@@ -13,13 +13,58 @@ import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useFocusEffect } from '@react-navigation/native';
 import { getUserLibraryApi } from '@jellyfin/sdk/lib/utils/api/user-library-api';
 import { getItemsApi } from '@jellyfin/sdk/lib/utils/api/items-api';
-import { BaseItemDto } from '@jellyfin/sdk/lib/generated-client';
+import {
+  BaseItemDto,
+  DeviceProfile,
+  DlnaProfileType,
+  MediaStreamProtocol,
+  EncodingContext,
+  TranscodeSeekInfo,
+  SubtitleDeliveryMethod,
+} from '@jellyfin/sdk/lib/generated-client';
 import { useAuth } from '../context/AuthContext';
 import { createApi, getImageUrl } from '../api/jellyfin';
 import { getMediaInfoApi } from '@jellyfin/sdk/lib/utils/api/media-info-api';
 import { RootStackParamList } from '../../App';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Detail'>;
+
+const IOS_DEVICE_PROFILE: DeviceProfile = {
+  DirectPlayProfiles: [
+    {
+      Container: 'mp4,m4v,mov',
+      Type: DlnaProfileType.Video,
+      VideoCodec: 'h264,hevc',
+      AudioCodec: 'aac,mp3,ac3,eac3,flac,alac',
+    },
+    {
+      Container: 'hls',
+      Type: DlnaProfileType.Video,
+      VideoCodec: 'h264,hevc',
+      AudioCodec: 'aac,mp3,ac3,eac3',
+    },
+  ],
+  TranscodingProfiles: [
+    {
+      Container: 'ts',
+      Type: DlnaProfileType.Video,
+      VideoCodec: 'h264',
+      AudioCodec: 'aac,mp3,ac3,eac3',
+      Protocol: MediaStreamProtocol.Hls,
+      Context: EncodingContext.Streaming,
+      TranscodeSeekInfo: TranscodeSeekInfo.Auto,
+      MinSegments: 2,
+      BreakOnNonKeyFrames: true,
+    },
+  ],
+  CodecProfiles: [],
+  ContainerProfiles: [],
+  SubtitleProfiles: [
+    { Format: 'vtt', Method: SubtitleDeliveryMethod.Hls },
+    { Format: 'ass', Method: SubtitleDeliveryMethod.External },
+    { Format: 'ssa', Method: SubtitleDeliveryMethod.External },
+  ],
+};
 
 const STREAMABLE = new Set(['Movie', 'Episode', 'Audio', 'MusicVideo', 'Video']);
 const HAS_CHILDREN = new Set(['Series', 'Season', 'Folder', 'CollectionFolder']);
@@ -112,20 +157,32 @@ export default function DetailScreen({ route, navigation }: Props) {
   async function navigateToPlayer(targetItemId: string, title: string, startPositionTicks = 0) {
     try {
       const api = createApi(serverUrl, token);
-      const { data } = await getMediaInfoApi(api).getPlaybackInfo({ itemId: targetItemId, userId });
+      const { data } = await getMediaInfoApi(api).getPostedPlaybackInfo({
+        itemId: targetItemId,
+        userId,
+        maxStreamingBitrate: 120_000_000,
+        playbackInfoDto: { DeviceProfile: IOS_DEVICE_PROFILE },
+      });
+
       const src = data.MediaSources?.[0];
       const mediaSourceId = src?.Id ?? targetItemId;
-      const playSessionId = data.PlaySessionId ?? '';
 
-      const params = new URLSearchParams({
-        api_key: token,
-        mediaSourceId,
-        playSessionId,
-        videoCodec: 'h264',
-        audioCodec: 'aac,mp3,ac3,eac3',
-        maxStreamingBitrate: '40000000',
-      });
-      const streamUrl = `${serverUrl}/Videos/${targetItemId}/master.m3u8?${params}`;
+      let streamUrl: string;
+      if (src?.TranscodingUrl) {
+        streamUrl = `${serverUrl}${src.TranscodingUrl}`;
+      } else {
+        const params = new URLSearchParams({
+          api_key: token,
+          mediaSourceId,
+          playSessionId: data.PlaySessionId ?? '',
+          videoCodec: 'h264',
+          audioCodec: 'aac,mp3,ac3,eac3',
+          maxStreamingBitrate: '120000000',
+          maxWidth: '1920',
+          maxHeight: '1080',
+        });
+        streamUrl = `${serverUrl}/Videos/${targetItemId}/master.m3u8?${params}`;
+      }
 
       navigation.navigate('Player', { streamUrl, title, itemId: targetItemId, startPositionTicks });
     } catch (e) {
