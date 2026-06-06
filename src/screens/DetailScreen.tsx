@@ -40,7 +40,7 @@ const IOS_DEVICE_PROFILE: DeviceProfile = {
     {
       Container: 'hls',
       Type: DlnaProfileType.Video,
-      VideoCodec: 'h264,hevc',
+      VideoCodec: 'h264',
       AudioCodec: 'aac,mp3,ac3,eac3',
     },
   ],
@@ -167,9 +167,26 @@ export default function DetailScreen({ route, navigation }: Props) {
       const src = data.MediaSources?.[0];
       const mediaSourceId = src?.Id ?? targetItemId;
 
+      const videoStream = src?.MediaStreams?.find(s => s.Type === 'Video');
+      const audioStream = src?.MediaStreams?.find(s => s.Type === 'Audio');
+      console.log('[Player] MediaSource', {
+        container: src?.Container,
+        videoCodec: videoStream?.Codec,
+        audioCodec: audioStream?.Codec,
+        supportsDirectPlay: src?.SupportsDirectPlay,
+        supportsDirectStream: src?.SupportsDirectStream,
+        supportsTranscoding: src?.SupportsTranscoding,
+        transcodeReasons: src?.TranscodeReasons,
+        hasTranscodingUrl: !!src?.TranscodingUrl,
+      });
+
       let streamUrl: string;
       if (src?.TranscodingUrl) {
         streamUrl = `${serverUrl}${src.TranscodingUrl}`;
+      } else if (['mp4', 'm4v', 'mov'].includes((src?.Container ?? '').toLowerCase())) {
+        // AVPlayer handles MP4/MOV natively — serve the file directly, no HLS needed
+        const ext = (src?.Container ?? 'mp4').toLowerCase();
+        streamUrl = `${serverUrl}/Videos/${targetItemId}/stream.${ext}?api_key=${token}&static=true&mediaSourceId=${mediaSourceId}`;
       } else {
         const params = new URLSearchParams({
           api_key: token,
@@ -184,6 +201,7 @@ export default function DetailScreen({ route, navigation }: Props) {
         streamUrl = `${serverUrl}/Videos/${targetItemId}/master.m3u8?${params}`;
       }
 
+      console.log('[Player] streamUrl', streamUrl);
       navigation.navigate('Player', { streamUrl, title, itemId: targetItemId, startPositionTicks });
     } catch (e) {
       console.error('Failed to resolve stream URL:', e);
