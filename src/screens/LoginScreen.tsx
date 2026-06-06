@@ -12,8 +12,12 @@ import {
   FlatList,
   Image,
 } from 'react-native';
+import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../App';
 import { useAuth } from '../context/AuthContext';
 import { useJellyfinDiscovery, DiscoveredServer } from '../hooks/useJellyfinDiscovery';
+
+type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 const HARDCODED_SERVER: DiscoveredServer = {
   name: 'Babu (Remote)',
@@ -22,7 +26,7 @@ const HARDCODED_SERVER: DiscoveredServer = {
 
 type Step = 'discovering' | 'pick-server' | 'credentials';
 
-export default function LoginScreen() {
+export default function LoginScreen({ navigation }: Props) {
   const { login } = useAuth();
   const { servers, scanning, rescan } = useJellyfinDiscovery();
   const [step, setStep] = useState<Step>('discovering');
@@ -178,6 +182,16 @@ export default function LoginScreen() {
             ) : (
               <Text style={styles.buttonText}>Sign In</Text>
             )}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.linkButton}
+            onPress={() => {
+              const url = selectedServer?.url ?? manualUrl.trim();
+              navigation.navigate('Register', { serverUrl: url });
+            }}
+          >
+            <Text style={styles.linkText}>Don't have an account? Create one</Text>
           </TouchableOpacity>
         </>
       )}
