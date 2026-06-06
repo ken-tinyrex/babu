@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   SafeAreaView,
   ScrollView,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { getUserViewsApi } from '@jellyfin/sdk/lib/utils/api/user-views-api';
 import { getItemsApi } from '@jellyfin/sdk/lib/utils/api/items-api';
@@ -105,49 +106,64 @@ export default function HomeScreen({ navigation }: Props) {
   const [sections, setSections] = useState<Section[]>([]);
   const [continueWatching, setContinueWatching] = useState<BaseItemDto[]>([]);
   const [loading, setLoading] = useState(true);
+  const hasLoaded = useRef(false);
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const api = createApi(serverUrl, token);
-        const { data: views } = await getUserViewsApi(api).getUserViews({ userId });
-        const libraries = views.Items ?? [];
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
 
-        const { data: resumeData } = await getItemsApi(api).getItems({
-          userId,
-          filters: [ItemFilter.IsResumable],
-          limit: 12,
-          sortBy: ['DatePlayed'],
-          sortOrder: ['Descending'],
-          includeItemTypes: ['Movie', 'Episode'],
-          enableUserData: true,
-          recursive: true,
-        });
-        setContinueWatching(resumeData.Items ?? []);
+      async function load() {
+        const silent = hasLoaded.current;
+        if (!silent) setLoading(true);
 
-        const sectionData = await Promise.all(
-          libraries.map(async (lib) => {
-            const { data } = await getItemsApi(api).getItems({
-              userId,
-              parentId: lib.Id!,
-              limit: 20,
-              sortBy: ['DateCreated'],
-              sortOrder: ['Descending'],
-              includeItemTypes: ['Movie', 'Series', 'Folder', 'Video', 'Audio', 'MusicVideo', 'BoxSet'],
-            });
-            return { library: lib, items: data.Items ?? [] };
-          })
-        );
+        try {
+          const api = createApi(serverUrl, token);
+          const { data: views } = await getUserViewsApi(api).getUserViews({ userId });
+          const libraries = views.Items ?? [];
 
-        setSections(sectionData.filter((s) => s.items.length > 0));
-      } catch (e) {
-        console.error('HomeScreen load error:', e);
-      } finally {
-        setLoading(false);
+          const { data: resumeData } = await getItemsApi(api).getItems({
+            userId,
+            filters: [ItemFilter.IsResumable],
+            limit: 12,
+            sortBy: ['DatePlayed'],
+            sortOrder: ['Descending'],
+            includeItemTypes: ['Movie', 'Episode'],
+            enableUserData: true,
+            recursive: true,
+          });
+
+          const sectionData = await Promise.all(
+            libraries.map(async (lib) => {
+              const { data } = await getItemsApi(api).getItems({
+                userId,
+                parentId: lib.Id!,
+                limit: 20,
+                sortBy: ['DateCreated'],
+                sortOrder: ['Descending'],
+                includeItemTypes: ['Movie', 'Series', 'Folder', 'Video', 'Audio', 'MusicVideo', 'BoxSet'],
+              });
+              return { library: lib, items: data.Items ?? [] };
+            })
+          );
+
+          if (!cancelled) {
+            setContinueWatching(resumeData.Items ?? []);
+            setSections(sectionData.filter((s) => s.items.length > 0));
+          }
+        } catch (e) {
+          console.error('HomeScreen load error:', e);
+        } finally {
+          if (!cancelled) {
+            if (!silent) setLoading(false);
+            hasLoaded.current = true;
+          }
+        }
       }
-    }
-    load();
-  }, [serverUrl, token, userId]);
+
+      load();
+      return () => { cancelled = true; };
+    }, [serverUrl, token, userId])
+  );
 
 
   if (loading) {
