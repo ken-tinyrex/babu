@@ -15,6 +15,11 @@ import {
 import { useAuth } from '../context/AuthContext';
 import { useJellyfinDiscovery, DiscoveredServer } from '../hooks/useJellyfinDiscovery';
 
+const HARDCODED_SERVER: DiscoveredServer = {
+  name: 'Babu (Remote)',
+  url: 'https://constitution-constructed-animation-startup.trycloudflare.com',
+};
+
 type Step = 'discovering' | 'pick-server' | 'credentials';
 
 export default function LoginScreen() {
@@ -87,24 +92,28 @@ export default function LoginScreen() {
       {/* Server selection */}
       {step === 'pick-server' && (
         <View style={styles.serverListContainer}>
-          {servers.length > 0 ? (
-            <>
-              <Text style={styles.sectionLabel}>Select a server</Text>
-              <FlatList
-                data={servers}
-                keyExtractor={(s) => s.url}
-                renderItem={({ item }) => (
-                  <TouchableOpacity style={styles.serverCard} onPress={() => selectServer(item)}>
-                    <Text style={styles.serverName}>{item.name}</Text>
-                    <Text style={styles.serverUrl}>{item.url}</Text>
-                  </TouchableOpacity>
-                )}
-                style={styles.serverList}
-              />
-            </>
-          ) : (
-            <Text style={styles.noServersText}>No servers found on this network.</Text>
-          )}
+          {(() => {
+            const allServers = [
+              ...servers.filter((s) => s.url !== HARDCODED_SERVER.url),
+              HARDCODED_SERVER,
+            ];
+            return (
+              <>
+                <Text style={styles.sectionLabel}>Select a server</Text>
+                <FlatList
+                  data={allServers}
+                  keyExtractor={(s) => s.url}
+                  renderItem={({ item }) => (
+                    <TouchableOpacity style={styles.serverCard} onPress={() => selectServer(item)}>
+                      <Text style={styles.serverName}>{item.name}</Text>
+                      <Text style={styles.serverUrl}>{item.url}</Text>
+                    </TouchableOpacity>
+                  )}
+                  style={styles.serverList}
+                />
+              </>
+            );
+          })()}
 
           {showManual ? (
             <View style={styles.manualContainer}>
