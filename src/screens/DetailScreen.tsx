@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -10,6 +10,7 @@ import {
   SafeAreaView,
 } from 'react-native';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import { getUserLibraryApi } from '@jellyfin/sdk/lib/utils/api/user-library-api';
 import { getItemsApi } from '@jellyfin/sdk/lib/utils/api/items-api';
 import { BaseItemDto } from '@jellyfin/sdk/lib/generated-client';
@@ -22,6 +23,15 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Detail'>;
 const STREAMABLE = new Set(['Movie', 'Episode', 'Audio', 'MusicVideo', 'Video']);
 const HAS_CHILDREN = new Set(['Series', 'Season', 'Folder', 'CollectionFolder']);
 
+function formatTicks(ticks: number): string {
+  const totalSeconds = Math.floor(ticks / 10_000_000);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
+}
+
 export default function DetailScreen({ route, navigation }: Props) {
   const { itemId } = route.params;
   const { serverUrl, token, userId } = useAuth();
@@ -30,32 +40,40 @@ export default function DetailScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [heroImageType, setHeroImageType] = useState<'Backdrop' | 'Primary'>('Backdrop');
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const api = createApi(serverUrl, token);
-        const { data } = await getUserLibraryApi(api).getItem({ userId, itemId });
-        setItem(data);
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      setLoading(true);
 
-        if (HAS_CHILDREN.has(data.Type ?? '')) {
-          const params = {
-            userId,
-            parentId: data.Id!,
-            sortBy: ['IndexNumber', 'SortName'] as any,
-            sortOrder: ['Ascending'] as any,
-            limit: 200,
-          };
-          const { data: childData } = await getItemsApi(api).getItems(params);
-          setChildren(childData.Items ?? []);
+      async function load() {
+        try {
+          const api = createApi(serverUrl, token);
+          const { data } = await getUserLibraryApi(api).getItem({ userId, itemId });
+          if (cancelled) return;
+          setItem(data);
+
+          if (HAS_CHILDREN.has(data.Type ?? '')) {
+            const params = {
+              userId,
+              parentId: data.Id!,
+              sortBy: ['IndexNumber', 'SortName'] as any,
+              sortOrder: ['Ascending'] as any,
+              limit: 200,
+            };
+            const { data: childData } = await getItemsApi(api).getItems(params);
+            if (!cancelled) setChildren(childData.Items ?? []);
+          }
+        } catch (e) {
+          console.error('DetailScreen load error:', e);
+        } finally {
+          if (!cancelled) setLoading(false);
         }
-      } catch (e) {
-        console.error('DetailScreen load error:', e);
-      } finally {
-        setLoading(false);
       }
-    }
-    load();
-  }, [itemId, serverUrl, token, userId]);
+
+      load();
+      return () => { cancelled = true; };
+    }, [itemId, serverUrl, token, userId])
+  );
 
   if (loading) {
     return (
@@ -87,6 +105,14 @@ export default function DetailScreen({ route, navigation }: Props) {
     : '';
   const genres = item.Genres?.join(', ') ?? '';
 
+  const resumeTicks = item.UserData?.PlaybackPositionTicks ?? 0;
+  const isWatched = item.UserData?.Played ?? false;
+  const hasResume = resumeTicks > 0 && !isWatched;
+
+  function navigateToPlayer(itemId: string, streamUrl: string, title: string, startPositionTicks = 0) {
+    navigation.navigate('Player', { streamUrl, title, itemId, startPositionTicks });
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView>
@@ -112,22 +138,34 @@ export default function DetailScreen({ route, navigation }: Props) {
               </View>
             )}
             {!!runtime && <Text style={styles.metaText}>{runtime}</Text>}
+            {isWatched && (
+              <View style={styles.watchedBadge}>
+                <Text style={styles.watchedText}>✓ Watched</Text>
+              </View>
+            )}
           </View>
 
           {!!genres && <Text style={styles.genres}>{genres}</Text>}
 
           {canPlay && (
-            <TouchableOpacity
-              style={styles.playButton}
-              onPress={() =>
-                navigation.navigate('Player', {
-                  streamUrl,
-                  title: item.Name ?? 'Playing',
-                })
-              }
-            >
-              <Text style={styles.playButtonText}>▶  Play</Text>
-            </TouchableOpacity>
+            <View style={styles.playActions}>
+              {hasResume && (
+                <TouchableOpacity
+                  style={styles.playButton}
+                  onPress={() => navigateToPlayer(item.Id!, streamUrl, item.Name ?? 'Playing', resumeTicks)}
+                >
+                  <Text style={styles.playButtonText}>▶  Resume from {formatTicks(resumeTicks)}</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={hasResume ? styles.playButtonSecondary : styles.playButton}
+                onPress={() => navigateToPlayer(item.Id!, streamUrl, item.Name ?? 'Playing')}
+              >
+                <Text style={hasResume ? styles.playButtonSecondaryText : styles.playButtonText}>
+                  {hasResume ? 'Play from beginning' : '▶  Play'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           )}
 
           {!!item.Overview && (
@@ -145,19 +183,42 @@ export default function DetailScreen({ route, navigation }: Props) {
                     ? `${ep.IndexNumber}. ${ep.Name}`
                     : ep.Name ?? 'Untitled';
                 const canPlayEp = STREAMABLE.has(ep.Type ?? '');
+                const epWatched = ep.UserData?.Played ?? false;
+                const epResumeTicks = ep.UserData?.PlaybackPositionTicks ?? 0;
+                const epProgress = ep.UserData?.PlayedPercentage ?? 0;
+                const showProgress = epResumeTicks > 0 && !epWatched;
+
                 return (
                   <TouchableOpacity
                     key={ep.Id}
                     style={styles.episodeRow}
                     onPress={() =>
                       canPlayEp
-                        ? navigation.navigate('Player', { streamUrl: epStream, title: epLabel })
+                        ? navigateToPlayer(ep.Id!, epStream, epLabel, epResumeTicks)
                         : navigation.navigate('Detail', { itemId: ep.Id! })
                     }
                   >
-                    <Image source={{ uri: epThumb }} style={styles.epThumb} />
-                    <Text style={styles.epLabel} numberOfLines={2}>{epLabel}</Text>
-                    {canPlayEp && <Text style={styles.epPlay}>▶</Text>}
+                    <View style={styles.epThumbContainer}>
+                      <Image source={{ uri: epThumb }} style={styles.epThumb} />
+                      {epWatched && (
+                        <View style={styles.watchedOverlay}>
+                          <Text style={styles.watchedOverlayText}>✓</Text>
+                        </View>
+                      )}
+                      {showProgress && (
+                        <View style={styles.progressBarTrack}>
+                          <View style={[styles.progressBarFill, { width: `${Math.min(epProgress, 100)}%` as any }]} />
+                        </View>
+                      )}
+                    </View>
+                    <Text style={[styles.epLabel, epWatched && styles.epLabelWatched]} numberOfLines={2}>
+                      {epLabel}
+                    </Text>
+                    {canPlayEp && (
+                      <Text style={[styles.epPlay, epWatched && styles.epPlayWatched]}>
+                        {epWatched ? '✓' : '▶'}
+                      </Text>
+                    )}
                   </TouchableOpacity>
                 );
               })}
@@ -190,6 +251,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     marginBottom: 8,
+    flexWrap: 'wrap',
   },
   metaText: { color: '#888', fontSize: 14 },
   ratingBadge: {
@@ -200,15 +262,30 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
   },
   ratingText: { color: '#888', fontSize: 12 },
+  watchedBadge: {
+    backgroundColor: '#1a3a1a',
+    borderRadius: 4,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  watchedText: { color: '#4caf50', fontSize: 12, fontWeight: '600' },
   genres: { color: '#666', fontSize: 13, marginBottom: 20 },
+  playActions: { gap: 10, marginBottom: 20 },
   playButton: {
     backgroundColor: '#00A4DC',
     borderRadius: 10,
     padding: 14,
     alignItems: 'center',
-    marginBottom: 20,
   },
   playButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  playButtonSecondary: {
+    borderWidth: 1,
+    borderColor: '#444',
+    borderRadius: 10,
+    padding: 12,
+    alignItems: 'center',
+  },
+  playButtonSecondaryText: { color: '#aaa', fontSize: 14 },
   overview: { color: '#ccc', fontSize: 15, lineHeight: 24 },
   episodesSection: { marginTop: 24 },
   episodesHeading: { color: '#fff', fontSize: 18, fontWeight: '600', marginBottom: 12 },
@@ -220,7 +297,37 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: '#222',
   },
+  epThumbContainer: { width: 100, height: 56, position: 'relative' },
   epThumb: { width: 100, height: 56, borderRadius: 4, backgroundColor: '#1A1A1A' },
+  watchedOverlay: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(76,175,80,0.85)',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  watchedOverlayText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+  progressBarTrack: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 3,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderBottomLeftRadius: 4,
+    borderBottomRightRadius: 4,
+  },
+  progressBarFill: {
+    height: 3,
+    backgroundColor: '#00A4DC',
+    borderBottomLeftRadius: 4,
+  },
   epLabel: { flex: 1, color: '#ddd', fontSize: 13 },
+  epLabelWatched: { color: '#666' },
   epPlay: { color: '#00A4DC', fontSize: 18, paddingHorizontal: 4 },
+  epPlayWatched: { color: '#4caf50', fontSize: 16 },
 });
