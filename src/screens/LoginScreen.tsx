@@ -9,29 +9,63 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  FlatList,
+  Image,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { useJellyfinDiscovery, DiscoveredServer } from '../hooks/useJellyfinDiscovery';
+
+type Step = 'discovering' | 'pick-server' | 'credentials';
 
 export default function LoginScreen() {
   const { login } = useAuth();
-  const [serverUrl, setServerUrl] = useState('http://192.168.100.2:8096');
+  const { servers, scanning, rescan } = useJellyfinDiscovery();
+  const [step, setStep] = useState<Step>('discovering');
+  const [selectedServer, setSelectedServer] = useState<DiscoveredServer | null>(null);
+  const [manualUrl, setManualUrl] = useState('');
+  const [showManual, setShowManual] = useState(false);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Transition out of discovering once scan completes
+  React.useEffect(() => {
+    if (!scanning && step === 'discovering') {
+      if (servers.length === 1) {
+        setSelectedServer(servers[0]);
+        setStep('credentials');
+      } else {
+        setStep('pick-server');
+      }
+    }
+  }, [scanning, step, servers]);
+
   async function handleLogin() {
-    if (!serverUrl.trim() || !username.trim()) {
-      Alert.alert('Missing fields', 'Please enter server URL and username.');
+    const url = selectedServer?.url ?? manualUrl.trim();
+    if (!url || !username.trim()) {
+      Alert.alert('Missing fields', 'Please enter a server URL and username.');
       return;
     }
     setLoading(true);
     try {
-      await login(serverUrl.trim(), username.trim(), password);
+      await login(url, username.trim(), password);
     } catch {
-      Alert.alert('Login failed', 'Could not connect to server. Check the URL and credentials.');
+      Alert.alert('Login failed', 'Could not connect to server. Check URL and credentials.');
     } finally {
       setLoading(false);
     }
+  }
+
+  function selectServer(server: DiscoveredServer) {
+    setSelectedServer(server);
+    setShowManual(false);
+    setStep('credentials');
+  }
+
+  function handleManualSubmit() {
+    if (!manualUrl.trim()) return;
+    setSelectedServer(null);
+    setStep('credentials');
   }
 
   return (
@@ -39,46 +73,105 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <Text style={styles.title}>babu</Text>
-      <Text style={styles.subtitle}>Your personal media player</Text>
+      <Image source={require('../../assets/icon.png')} style={styles.icon} />
+      <Image source={require('../../assets/app_logo.png')} style={styles.logo} resizeMode="contain" />
 
-      <TextInput
-        style={styles.input}
-        placeholder="Server URL"
-        placeholderTextColor="#555"
-        value={serverUrl}
-        onChangeText={setServerUrl}
-        autoCapitalize="none"
-        keyboardType="url"
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Username"
-        placeholderTextColor="#555"
-        value={username}
-        onChangeText={setUsername}
-        autoCapitalize="none"
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        placeholderTextColor="#555"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
+      {/* Discovery phase */}
+      {step === 'discovering' && (
+        <View style={styles.discoveryContainer}>
+          <ActivityIndicator color="#00A4DC" size="large" />
+          <Text style={styles.scanningText}>Scanning for Jellyfin servers…</Text>
+        </View>
+      )}
 
-      <TouchableOpacity
-        style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={handleLogin}
-        disabled={loading}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Sign In</Text>
-        )}
-      </TouchableOpacity>
+      {/* Server selection */}
+      {step === 'pick-server' && (
+        <View style={styles.serverListContainer}>
+          {servers.length > 0 ? (
+            <>
+              <Text style={styles.sectionLabel}>Select a server</Text>
+              <FlatList
+                data={servers}
+                keyExtractor={(s) => s.url}
+                renderItem={({ item }) => (
+                  <TouchableOpacity style={styles.serverCard} onPress={() => selectServer(item)}>
+                    <Text style={styles.serverName}>{item.name}</Text>
+                    <Text style={styles.serverUrl}>{item.url}</Text>
+                  </TouchableOpacity>
+                )}
+                style={styles.serverList}
+              />
+            </>
+          ) : (
+            <Text style={styles.noServersText}>No servers found on this network.</Text>
+          )}
+
+          {showManual ? (
+            <View style={styles.manualContainer}>
+              <TextInput
+                style={styles.input}
+                placeholder="http://192.168.x.x:8096"
+                placeholderTextColor="#555"
+                value={manualUrl}
+                onChangeText={setManualUrl}
+                autoCapitalize="none"
+                keyboardType="url"
+                autoFocus
+              />
+              <TouchableOpacity
+                style={[styles.button, !manualUrl.trim() && styles.buttonDisabled]}
+                onPress={handleManualSubmit}
+                disabled={!manualUrl.trim()}
+              >
+                <Text style={styles.buttonText}>Continue</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.row}>
+              <TouchableOpacity style={styles.linkButton} onPress={() => setShowManual(true)}>
+                <Text style={styles.linkText}>Enter manually</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.linkButton} onPress={rescan}>
+                <Text style={styles.linkText}>Scan again</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* Credentials */}
+      {step === 'credentials' && (
+        <>
+          <TextInput
+            style={styles.input}
+            placeholder="Username"
+            placeholderTextColor="#555"
+            value={username}
+            onChangeText={setUsername}
+            autoCapitalize="none"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            placeholderTextColor="#555"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+
+          <TouchableOpacity
+            style={[styles.button, loading && styles.buttonDisabled]}
+            onPress={handleLogin}
+            disabled={loading}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Sign In</Text>
+            )}
+          </TouchableOpacity>
+        </>
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -91,17 +184,76 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: 24,
   },
-  title: {
-    fontSize: 52,
-    fontWeight: '700',
-    color: '#00A4DC',
-    marginBottom: 8,
-    letterSpacing: 3,
+  icon: {
+    width: 100,
+    height: 100,
+    marginBottom: 16,
   },
-  subtitle: {
-    fontSize: 14,
-    color: '#555',
+  logo: {
+    width: 160,
+    height: 56,
     marginBottom: 48,
+  },
+  discoveryContainer: {
+    alignItems: 'center',
+    gap: 16,
+  },
+  scanningText: {
+    color: '#888',
+    fontSize: 14,
+  },
+  serverListContainer: {
+    width: '100%',
+  },
+  sectionLabel: {
+    color: '#888',
+    fontSize: 12,
+    marginBottom: 8,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  serverList: {
+    maxHeight: 200,
+  },
+  serverCard: {
+    backgroundColor: '#1A1A1A',
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#2A2A2A',
+  },
+  serverName: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  serverUrl: {
+    color: '#555',
+    fontSize: 12,
+  },
+  noServersText: {
+    color: '#888',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 16,
+  },
+  manualContainer: {
+    width: '100%',
+    marginTop: 8,
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  linkButton: {
+    padding: 8,
+  },
+  linkText: {
+    color: '#00A4DC',
+    fontSize: 13,
   },
   input: {
     width: '100%',
