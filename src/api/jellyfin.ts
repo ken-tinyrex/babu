@@ -35,3 +35,16 @@ export function getStreamUrl(
   const ext = container ? `.${container}` : '';
   return `${serverUrl}/Videos/${itemId}/stream${ext}?api_key=${token}&static=true&mediaSourceId=${mediaSourceId}`;
 }
+
+// HLS stream used for muted video previews in the Featured carousel
+export function getPreviewUrl(serverUrl: string, itemId: string, token: string): string {
+  return (
+    `${serverUrl}/Videos/${itemId}/master.m3u8` +
+    `?api_key=${token}` +
+    `&MediaSourceId=${itemId}` +
+    `&VideoCodec=h264` +
+    `&AudioCodec=aac` +
+    `&MaxStreamingBitrate=4000000` +
+    `&DeviceId=babu-mobile-001`
+  );
+}
