@@ -98,7 +98,7 @@ export default function HomeScreen({ navigation }: Props) {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.logo}>babu</Text>
+        <Image source={require('../../assets/app_logo.png')} style={styles.logo} resizeMode="contain" />
         <TouchableOpacity onPress={logout}>
           <Text style={styles.logoutText}>Sign out</Text>
         </TouchableOpacity>
@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
-  logo: { fontSize: 24, fontWeight: '700', color: '#00A4DC', letterSpacing: 1 },
+  logo: { height: 32, width: 120 },
   logoutText: { color: '#555', fontSize: 14 },
   section: { marginBottom: 28 },
   sectionTitle: {
