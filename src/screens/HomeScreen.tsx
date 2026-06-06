@@ -16,6 +16,7 @@ import { BaseItemDto } from '@jellyfin/sdk/lib/generated-client';
 import { useAuth } from '../context/AuthContext';
 import { createApi, getImageUrl } from '../api/jellyfin';
 import { RootStackParamList } from '../../App';
+import FeaturedCarousel from '../components/FeaturedCarousel';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Home'>;
 
@@ -105,6 +106,12 @@ export default function HomeScreen({ navigation }: Props) {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false}>
+        <FeaturedCarousel
+          serverUrl={serverUrl}
+          token={token}
+          userId={userId}
+          onPress={(item) => navigation.navigate('Detail', { itemId: item.Id! })}
+        />
         {sections.map(({ library, items }) => (
           <View key={library.Id} style={styles.section}>
             <Text style={styles.sectionTitle}>{library.Name}</Text>
