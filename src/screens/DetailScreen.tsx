@@ -15,7 +15,8 @@ import { getUserLibraryApi } from '@jellyfin/sdk/lib/utils/api/user-library-api'
 import { getItemsApi } from '@jellyfin/sdk/lib/utils/api/items-api';
 import { BaseItemDto } from '@jellyfin/sdk/lib/generated-client';
 import { useAuth } from '../context/AuthContext';
-import { createApi, getImageUrl, getStreamUrl } from '../api/jellyfin';
+import { createApi, getImageUrl } from '../api/jellyfin';
+import { getMediaInfoApi } from '@jellyfin/sdk/lib/utils/api/media-info-api';
 import { RootStackParamList } from '../../App';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Detail'>;
@@ -96,7 +97,6 @@ export default function DetailScreen({ route, navigation }: Props) {
 
   const imageUrl = getImageUrl(serverUrl, item.Id!, token, 800, heroImageType);
   const canPlay = STREAMABLE.has(item.Type ?? '');
-  const streamUrl = getStreamUrl(serverUrl, item.Id!, token);
 
   const year = item.ProductionYear?.toString() ?? '';
   const rating = item.OfficialRating ?? '';
@@ -109,8 +109,28 @@ export default function DetailScreen({ route, navigation }: Props) {
   const isWatched = item.UserData?.Played ?? false;
   const hasResume = resumeTicks > 0 && !isWatched;
 
-  function navigateToPlayer(itemId: string, streamUrl: string, title: string, startPositionTicks = 0) {
-    navigation.navigate('Player', { streamUrl, title, itemId, startPositionTicks });
+  async function navigateToPlayer(targetItemId: string, title: string, startPositionTicks = 0) {
+    try {
+      const api = createApi(serverUrl, token);
+      const { data } = await getMediaInfoApi(api).getPlaybackInfo({ itemId: targetItemId, userId });
+      const src = data.MediaSources?.[0];
+      const mediaSourceId = src?.Id ?? targetItemId;
+      const playSessionId = data.PlaySessionId ?? '';
+
+      const params = new URLSearchParams({
+        api_key: token,
+        mediaSourceId,
+        playSessionId,
+        videoCodec: 'h264',
+        audioCodec: 'aac,mp3,ac3,eac3',
+        maxStreamingBitrate: '40000000',
+      });
+      const streamUrl = `${serverUrl}/Videos/${targetItemId}/master.m3u8?${params}`;
+
+      navigation.navigate('Player', { streamUrl, title, itemId: targetItemId, startPositionTicks });
+    } catch (e) {
+      console.error('Failed to resolve stream URL:', e);
+    }
   }
 
   return (
@@ -152,14 +172,14 @@ export default function DetailScreen({ route, navigation }: Props) {
               {hasResume && (
                 <TouchableOpacity
                   style={styles.playButton}
-                  onPress={() => navigateToPlayer(item.Id!, streamUrl, item.Name ?? 'Playing', resumeTicks)}
+                  onPress={() => navigateToPlayer(item.Id!, item.Name ?? 'Playing', resumeTicks)}
                 >
                   <Text style={styles.playButtonText}>▶  Resume from {formatTicks(resumeTicks)}</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity
                 style={hasResume ? styles.playButtonSecondary : styles.playButton}
-                onPress={() => navigateToPlayer(item.Id!, streamUrl, item.Name ?? 'Playing')}
+                onPress={() => navigateToPlayer(item.Id!, item.Name ?? 'Playing')}
               >
                 <Text style={hasResume ? styles.playButtonSecondaryText : styles.playButtonText}>
                   {hasResume ? 'Play from beginning' : '▶  Play'}
@@ -177,7 +197,6 @@ export default function DetailScreen({ route, navigation }: Props) {
               <Text style={styles.episodesHeading}>Episodes</Text>
               {children.map((ep) => {
                 const epThumb = getImageUrl(serverUrl, ep.Id!, token, 320, 'Primary');
-                const epStream = getStreamUrl(serverUrl, ep.Id!, token);
                 const epLabel =
                   ep.IndexNumber != null
                     ? `${ep.IndexNumber}. ${ep.Name}`
@@ -194,7 +213,7 @@ export default function DetailScreen({ route, navigation }: Props) {
                     style={styles.episodeRow}
                     onPress={() =>
                       canPlayEp
-                        ? navigateToPlayer(ep.Id!, epStream, epLabel, epResumeTicks)
+                        ? navigateToPlayer(ep.Id!, epLabel, epResumeTicks)
                         : navigation.navigate('Detail', { itemId: ep.Id! })
                     }
                   >
