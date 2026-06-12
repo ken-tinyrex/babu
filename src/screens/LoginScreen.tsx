@@ -21,7 +21,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 const HARDCODED_SERVER: DiscoveredServer = {
   name: 'Babu (Remote)',
-  url: 'https://causes-brokers-projectors-exotic.trycloudflare.com',
+  url: process.env.EXPO_PUBLIC_JELLYFIN_URL ?? '',
 };
 
 type Step = 'discovering' | 'pick-server' | 'credentials';

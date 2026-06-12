@@ -47,13 +47,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAuth(saved);
           return;
         } catch (err: any) {
-          // Network unreachable (not an auth error) — trust the cached token
           const status = err?.response?.status ?? err?.status;
-          if (status !== 401 && status !== 403) {
+          // No status means genuine network failure (no connection) — trust the cached token
+          // Any HTTP status (including 5xx from a dead tunnel) means the URL is reachable
+          // but broken, so fall through to silent re-auth
+          if (status == null) {
             setAuth(saved);
             return;
           }
-          // Token expired — fall through to silent re-auth
+          // Token expired or server error — fall through to silent re-auth
         }
       }
 
