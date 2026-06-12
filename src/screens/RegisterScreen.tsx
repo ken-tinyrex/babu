@@ -16,7 +16,7 @@ import { RootStackParamList } from '../../App';
 import { useAuth } from '../context/AuthContext';
 
 // Update this to your deployed proxy server URL
-const PROXY_URL = 'https://gamma-bubble-villas-concrete.trycloudflare.com';
+const PROXY_URL = 'https://toxic-arbor-loops-roles.trycloudflare.com';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Register'>;
 

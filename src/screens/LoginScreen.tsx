@@ -21,7 +21,7 @@ type Props = NativeStackScreenProps<RootStackParamList, 'Login'>;
 
 const HARDCODED_SERVER: DiscoveredServer = {
   name: 'Babu (Remote)',
-  url: 'https://constitution-constructed-animation-startup.trycloudflare.com',
+  url: 'https://causes-brokers-projectors-exotic.trycloudflare.com',
 };
 
 type Step = 'discovering' | 'pick-server' | 'credentials';
@@ -29,8 +29,8 @@ type Step = 'discovering' | 'pick-server' | 'credentials';
 export default function LoginScreen({ navigation }: Props) {
   const { login } = useAuth();
   const { servers, scanning, rescan } = useJellyfinDiscovery();
-  const [step, setStep] = useState<Step>('discovering');
-  const [selectedServer, setSelectedServer] = useState<DiscoveredServer | null>(null);
+  const [step, setStep] = useState<Step>('credentials');
+  const [selectedServer, setSelectedServer] = useState<DiscoveredServer | null>(HARDCODED_SERVER);
   const [manualUrl, setManualUrl] = useState('');
   const [showManual, setShowManual] = useState(false);
   const [username, setUsername] = useState('');

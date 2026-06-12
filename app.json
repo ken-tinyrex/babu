@@ -31,6 +31,13 @@
       "expo-secure-store",
       "expo-video"
     ],
+    "updates": {
+      "url": "https://u.expo.dev/f3590afb-49c6-46cd-8e09-8b7ee26c262b",
+      "checkAutomatically": "ON_LOAD"
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "extra": {
       "eas": {
         "projectId": "f3590afb-49c6-46cd-8e09-8b7ee26c262b"
