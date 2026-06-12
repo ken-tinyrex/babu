@@ -13,40 +13,55 @@ Connects to your Jellyfin media server and lets you browse and stream your movie
 | Jellyfin Server | Done | Running on macOS at `localhost:8096` |
 | Local Network | Done | `http://192.168.100.2:8096` |
 | Tailscale VPN | Done | Mac Tailscale IP: `100.107.229.85` |
-| Cloudflare Tunnel | Done | Temporary URL via `cloudflared` |
+| Cloudflare Tunnel | Done | Auto-started via `npm run dev` |
 | Permanent Tunnel URL | Pending | Needs a domain name |
+| EAS OTA Updates | Done | Auto-checks on app load |
 
 ## App screens
 
-- **Login** — enter your server URL and Jellyfin credentials (server URL defaults to your local IP)
-- **Home** — Netflix-style library view: one horizontal row per library (Movies, TV Shows, etc.)
+- **Login** — auto-discovers Jellyfin servers on the local network; falls back to a hardcoded remote URL; multi-step flow: pick server → enter credentials
+- **Register** — self-registration via the proxy server (rate-limited, no admin token exposed to client)
+- **Home** — Netflix-style library view: featured carousel + one horizontal row per library (Movies, TV Shows, etc.)
 - **Detail** — poster, title, year, rating, runtime, genres, overview, and a Play button
 - **Player** — full-screen video player with native controls and buffering indicator
 
 ## Tech stack
 
-- [Expo](https://expo.dev) (SDK 56) + React Native
-- TypeScript
-- [React Navigation](https://reactnavigation.org) — native stack navigator
-- [@jellyfin/sdk](https://github.com/jellyfin/jellyfin-sdk-typescript) — Jellyfin REST API client
-- [expo-av](https://docs.expo.dev/versions/latest/sdk/av/) — video playback
-- [@react-native-async-storage/async-storage](https://react-native-async-storage.github.io/async-storage/) — persists login session
+- [Expo](https://expo.dev) (SDK 54) + React Native 0.81
+- TypeScript 5.9
+- [React Navigation](https://reactnavigation.org) v7 — native stack navigator
+- [@jellyfin/sdk](https://github.com/jellyfin/jellyfin-sdk-typescript) ^0.13 — Jellyfin REST API client
+- [expo-video](https://docs.expo.dev/versions/v54.0.0/sdk/video/) — video playback (new Expo video API)
+- [expo-secure-store](https://docs.expo.dev/versions/v54.0.0/sdk/securestore/) — persists login session securely
+- [expo-linear-gradient](https://docs.expo.dev/versions/v54.0.0/sdk/linear-gradient/) — UI gradients
+- [expo-screen-orientation](https://docs.expo.dev/versions/v54.0.0/sdk/screen-orientation/) — landscape lock during playback
+- [expo-updates](https://docs.expo.dev/versions/v54.0.0/sdk/updates/) — OTA updates via EAS
+- Node.js/Express proxy server — handles user registration without exposing admin credentials
 
 ## Project structure
 
 ```
 babu/
-├── App.tsx                      # Navigation container + auth-based routing
-├── src/
-│   ├── api/
-│   │   └── jellyfin.ts          # SDK client factory, image/stream URL helpers
-│   ├── context/
-│   │   └── AuthContext.tsx      # Auth state, login/logout, AsyncStorage persistence
-│   └── screens/
-│       ├── LoginScreen.tsx
-│       ├── HomeScreen.tsx
-│       ├── DetailScreen.tsx
-│       └── PlayerScreen.tsx
+├── App.tsx                          # Navigation container + auth-based routing
+├── server/
+│   └── index.js                     # Express proxy: /register endpoint, rate limiting
+├── scripts/
+│   └── start-tunnels.js             # Starts Cloudflare tunnels for Jellyfin + proxy
+└── src/
+    ├── api/
+    │   └── jellyfin.ts              # SDK client factory, image/stream URL helpers
+    ├── components/
+    │   └── FeaturedCarousel.tsx     # Hero carousel for featured content
+    ├── context/
+    │   └── AuthContext.tsx          # Auth state, login/logout, SecureStore persistence
+    ├── hooks/
+    │   └── useJellyfinDiscovery.ts  # Auto-discovers Jellyfin servers on local network
+    └── screens/
+        ├── LoginScreen.tsx          # Server discovery + credential entry (multi-step)
+        ├── RegisterScreen.tsx       # New user registration via proxy
+        ├── HomeScreen.tsx
+        ├── DetailScreen.tsx
+        └── PlayerScreen.tsx
 ```
 
 ## Getting started
@@ -54,49 +69,81 @@ babu/
 ### Prerequisites
 
 - Node.js
-- Expo CLI (`npm install -g expo-cli`)
-- Expo Go app on your iPhone (from the App Store)
+- Expo Go app on your iPhone (from the App Store), or a dev build
 - Jellyfin running on your Mac
+- A `.env` file in `server/` with `JELLYFIN_URL` and `JELLYFIN_ADMIN_TOKEN`
 
 ### Install dependencies
 
 ```bash
 npm install
+cd server && npm install
 ```
 
-### Run the app
+### Run everything (app + proxy server + tunnels)
 
 ```bash
-npx expo start
+npm run dev
 ```
 
-Press `i` for the iOS simulator, or scan the QR code with Expo Go on your iPhone.
+This starts the proxy server, Expo dev server, and both Cloudflare tunnels concurrently.
 
-Make sure your phone is on the same WiFi as your Mac, then sign in with your Jellyfin credentials.
+Or run just the Expo app:
+
+```bash
+npm start
+```
+
+### Build a preview APK (Android)
+
+```bash
+eas build --profile preview --platform android
+```
+
+This produces an internal-distribution APK you can install directly on an Android device. Requires an [Expo account](https://expo.dev) and `eas-cli` (`npm install -g eas-cli`).
+
+Press `i` for the iOS simulator, or scan the QR code with Expo Go on your iPhone.
 
 ## Accessing Jellyfin remotely
 
 | Scenario | Server URL to use |
 |---|---|
-| Same WiFi | `http://192.168.100.2:8096` |
+| Same WiFi | Auto-discovered or `http://192.168.100.2:8096` |
 | Via Tailscale (any network) | `http://100.107.229.85:8096` |
-| Via Cloudflare Tunnel | Your tunnel URL (see below) |
+| Via Cloudflare Tunnel | Your tunnel URL (rotates on restart) |
 
-### Starting the Cloudflare Tunnel
+### Starting tunnels manually
 
 ```bash
-cloudflared tunnel --url http://localhost:8096
+npm run tunnel
 ```
 
-The tunnel URL changes every time you restart. For a permanent URL, you need a domain name and a named Cloudflare tunnel (Phase 4).
+This starts a tunnel for Jellyfin (`localhost:8096`) and one for the proxy server (`localhost:3000`). URLs change every restart; for permanent URLs you need a domain name and a named Cloudflare tunnel.
+
+## Proxy server
+
+The `server/` directory contains a small Express app that fronts user registration so the Jellyfin admin token never leaves the server.
+
+**Required env vars** (`server/.env`):
+
+```
+JELLYFIN_URL=http://localhost:8096
+JELLYFIN_ADMIN_TOKEN=your_admin_api_token
+```
+
+The `/register` endpoint is rate-limited to 5 requests per 15 minutes per IP.
 
 ## Roadmap
 
 - [x] Jellyfin server running on macOS
 - [x] Local and remote network access
 - [x] Tailscale VPN
-- [x] Cloudflare Tunnel (temporary URL)
+- [x] Cloudflare Tunnel (auto-started with `npm run dev`)
 - [x] React Native app — Login, Home, Detail, Player screens
+- [x] Self-registration (Register screen + proxy server)
+- [x] Local server auto-discovery
+- [x] Featured carousel on Home
+- [x] EAS OTA updates
 - [ ] Permanent Cloudflare Tunnel URL (requires domain ~$10/yr)
 - [ ] Episode browser for TV series
 - [ ] Search
