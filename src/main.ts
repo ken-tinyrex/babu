@@ -1,5 +1,5 @@
 import { Application, Assets, type Texture } from 'pixi.js';
-import { catalog } from './data/catalog';
+import { allTitles, catalog } from './data/catalog';
 import { enrichTitle } from './data/movieInfo';
 import { Details } from './details/Details';
 import { Player } from './player/Player';
@@ -18,11 +18,14 @@ async function boot() {
   });
   document.getElementById('app')!.appendChild(app.canvas);
 
-  // Header mascot + featured movie details (TMDB / Wikipedia), loaded in parallel.
+  // Header mascot + movie details for real titles (TMDB / Wikipedia), loaded in parallel.
   // A slow movie API never blocks startup for more than a few seconds.
   const [mascot] = await Promise.all([
     Assets.load<Texture>('/icons/logo.png').catch(() => null),
-    Promise.race([enrichTitle(catalog.featured), new Promise((r) => setTimeout(r, 3000))]),
+    Promise.race([
+      Promise.all(allTitles(catalog).filter((t) => t.meta).map(enrichTitle)),
+      new Promise((r) => setTimeout(r, 3000)),
+    ]),
   ]);
 
   const player = new Player();

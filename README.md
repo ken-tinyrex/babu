@@ -24,7 +24,7 @@ src/
   safeArea.ts         reads iOS notch / home-indicator insets
   data/
     types.ts          Title, Shelf, Catalog, VideoSource
-    catalog.ts        demo catalog + FEATURED_VIDEO_URL + featured movie details
+    catalog.ts        catalog: real titles (video URL + details) and demo placeholders
     movieInfo.ts      movie details from TMDB (optional key) or Wikipedia (no key)
   details/Details.ts  movie details page (DOM sheet over the canvas)
   player/Player.ts    DOM player: MP4, HLS (native on Safari, hls.js elsewhere), optional embed iframe
@@ -53,7 +53,7 @@ Babu needs the **direct** video URL, not the address of a watch page (a page lik
 1. Open the watch page in desktop Chrome and start the video.
 2. Open DevTools (`Cmd+Opt+I`) → **Network** tab → filter **Media** (or type `mp4` / `m3u8` in the filter box).
 3. Right-click the request → **Copy → Copy URL**.
-4. Paste it into `FEATURED_VIDEO_URL` in `src/data/catalog.ts` (or as a `{ kind: 'file', url }` on any title).
+4. In `src/data/catalog.ts`, copy an existing real title (e.g. `odyssey`), set `source: { kind: 'file', url }` to your URL, and add it to a shelf.
 
 If it doesn't play in Babu, the host is probably blocking it:
 - **Expiring / signed URL** (long `?token=`/`?expires=` query): it works for a while, then stops. You'll need a stable link from the host, or host the file yourself.
