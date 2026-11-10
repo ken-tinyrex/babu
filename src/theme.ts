@@ -37,9 +37,9 @@ export function breakpointFor(width: number): Breakpoint {
 export function metricsFor(width: number, height: number): Metrics {
   const bp = breakpointFor(width);
   const base = {
-    mobile: { gutter: 16, headerH: 56, posterW: 112, posterGap: 10, rowTitleSize: 16, rowGap: 22, heroTitleSize: 30, heroBodySize: 14 },
-    tablet: { gutter: 24, headerH: 64, posterW: 140, posterGap: 12, rowTitleSize: 18, rowGap: 28, heroTitleSize: 42, heroBodySize: 15 },
-    desktop: { gutter: 48, headerH: 72, posterW: 180, posterGap: 16, rowTitleSize: 22, rowGap: 36, heroTitleSize: 56, heroBodySize: 17 },
+    mobile: { gutter: 16, headerH: 68, posterW: 112, posterGap: 10, rowTitleSize: 16, rowGap: 22, heroTitleSize: 30, heroBodySize: 14 },
+    tablet: { gutter: 24, headerH: 76, posterW: 140, posterGap: 12, rowTitleSize: 18, rowGap: 28, heroTitleSize: 42, heroBodySize: 15 },
+    desktop: { gutter: 48, headerH: 88, posterW: 180, posterGap: 16, rowTitleSize: 22, rowGap: 36, heroTitleSize: 56, heroBodySize: 17 },
   }[bp];
 
   const heroH =

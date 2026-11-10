@@ -1,4 +1,4 @@
-import { Application } from 'pixi.js';
+import { Application, Assets, type Texture } from 'pixi.js';
 import './style.css';
 import { catalog } from './data/catalog';
 import { Player } from './player/Player';
@@ -17,8 +17,11 @@ async function boot() {
   });
   document.getElementById('app')!.appendChild(app.canvas);
 
+  // Header mascot; the page still works without it.
+  const mascot = await Assets.load<Texture>('/icons/logo.png').catch(() => null);
+
   const player = new Player();
-  const home = new HomeScreen(app, catalog, (item) => void player.open(item));
+  const home = new HomeScreen(app, catalog, (item) => void player.open(item), mascot);
   app.stage.addChild(home);
 
   home.layout();

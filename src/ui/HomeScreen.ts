@@ -1,4 +1,4 @@
-import { Container, type Application, type FederatedPointerEvent } from 'pixi.js';
+import { Container, type Application, type FederatedPointerEvent, type Texture } from 'pixi.js';
 import type { Catalog, Title } from '../data/types';
 import { readSafeArea } from '../safeArea';
 import { metricsFor, type Metrics } from '../theme';
@@ -26,7 +26,7 @@ interface Gesture {
  */
 export class HomeScreen extends Container {
   private content = new Container();
-  private header = new Header();
+  private header: Header;
   private hero: Hero;
   private rows: Row[];
   private page = new Scroller();
@@ -38,8 +38,10 @@ export class HomeScreen extends Container {
     private app: Application,
     catalog: Catalog,
     onPlay: (item: Title) => void,
+    mascot: Texture | null,
   ) {
     super();
+    this.header = new Header(mascot);
     // Swallow taps that were really the end of a drag.
     const select = (item: Title) => {
       if (!this.dragged) onPlay(item);
@@ -73,6 +75,7 @@ export class HomeScreen extends Container {
     this.page.update(dt);
     this.content.y = -this.page.value;
     for (const r of this.rows) r.update(dt);
+    this.header.update(dt);
     this.header.setSolidity(this.page.value / (this.m.heroH * 0.4));
   }
 
