@@ -1,5 +1,4 @@
 import { Application, Assets, type Texture } from 'pixi.js';
-import './style.css';
 import { catalog } from './data/catalog';
 import { Player } from './player/Player';
 import { theme } from './theme';
@@ -31,6 +30,20 @@ async function boot() {
   // Nothing animates behind the player; save battery while it's open.
   player.onOpen = () => app.ticker.stop();
   player.onClose = () => app.ticker.start();
+
+  // Fade out the Babu boot loader once the first frame is on screen.
+  requestAnimationFrame(() => hideBootLoader());
 }
 
-void boot();
+function hideBootLoader() {
+  const el = document.getElementById('boot');
+  if (!el) return;
+  el.classList.add('is-done');
+  setTimeout(() => el.remove(), 400);
+}
+
+boot().catch((err) => {
+  console.error(err);
+  const text = document.querySelector('#boot .loader__text');
+  if (text) text.textContent = 'Babu tripped over something. Please refresh.';
+});

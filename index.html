@@ -17,9 +17,18 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="preload" as="image" href="/icons/logo.png" />
     <title>Babu</title>
+    <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <div id="app"></div>
+
+    <div id="boot" class="boot" role="status" aria-live="polite">
+      <div class="loader">
+        <img class="loader__pup" src="/icons/logo.png" alt="" width="221" height="192" />
+        <div class="loader__paws" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="loader__text">Loading…</div>
+      </div>
+    </div>
 
     <div id="player" class="player" hidden>
       <button class="player__close" type="button" aria-label="Close player">&times;</button>
