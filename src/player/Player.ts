@@ -1,5 +1,6 @@
 import type Hls from 'hls.js';
 import type { Title } from '../data/types';
+import { suppressGhostClicks } from '../ghostClick';
 
 const isHls = (url: string) => /\.m3u8(\?|$)/i.test(url);
 
@@ -75,6 +76,7 @@ export class Player {
   /** Call directly from a tap handler so mobile browsers treat play() as user-initiated. */
   async open(title: Title): Promise<void> {
     const token = ++this.token;
+    suppressGhostClicks();
     this.teardown();
     this.session = new AbortController();
     this.titleEl.textContent = title.name;
@@ -103,7 +105,8 @@ export class Player {
     video.playsInline = true;
     video.autoplay = true;
     video.preload = 'auto';
-    if (title.thumbnail) video.poster = title.thumbnail;
+    const still = title.backdrop ?? title.poster;
+    if (still) video.poster = still;
     this.video = video;
     this.stage.prepend(video);
 
@@ -281,7 +284,10 @@ export class Player {
 
   private onKey(e: KeyboardEvent) {
     if (!this.isOpen) return;
-    if (e.key === 'Escape') return this.close();
+    if (e.key === 'Escape') {
+      e.preventDefault(); // so the details page underneath doesn't also close
+      return this.close();
+    }
     const v = this.video;
     if (!v || (e.target as HTMLElement | null)?.closest?.('button')) return;
     const keys: Record<string, () => void> = {

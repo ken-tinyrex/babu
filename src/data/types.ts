@@ -5,15 +5,51 @@
  */
 export type VideoSource = { kind: 'file'; url: string } | { kind: 'embed'; url: string };
 
+export interface CastMember {
+  name: string;
+  character?: string;
+  photo?: string;
+}
+
+export interface Fact {
+  label: string;
+  value: string;
+}
+
+/** Extra movie details, filled locally and/or from TMDB / Wikipedia (see movieInfo.ts). */
+export interface MovieMeta {
+  /** themoviedb.org id, used when VITE_TMDB_TOKEN is set. */
+  tmdbId?: number;
+  /** Wikipedia page title, used for synopsis + poster without an API key. */
+  wikiTitle?: string;
+  tagline?: string;
+  genres?: string[];
+  certification?: string;
+  /** TMDB user score, 0–10. */
+  score?: number;
+  director?: string;
+  cast?: CastMember[];
+  facts?: Fact[];
+  /** Longer encyclopedia summary (Wikipedia). */
+  about?: string;
+  aboutUrl?: string;
+  /** Which remote source filled in the details, for attribution. */
+  source?: 'tmdb' | 'wikipedia';
+}
+
 export interface Title {
   id: string;
   name: string;
   description: string;
   year?: number;
   duration?: string;
-  /** Placeholder poster color, used until (or instead of) a thumbnail. */
+  /** Placeholder color, used until (or instead of) artwork. */
   color: number;
-  thumbnail?: string;
+  /** Portrait artwork (2:3). */
+  poster?: string;
+  /** Landscape artwork (16:9). */
+  backdrop?: string;
+  meta?: MovieMeta;
   source: VideoSource;
 }
 

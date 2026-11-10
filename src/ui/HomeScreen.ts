@@ -38,16 +38,20 @@ export class HomeScreen extends Container {
     private app: Application,
     catalog: Catalog,
     onPlay: (item: Title) => void,
+    onInfo: (item: Title) => void,
     mascot: Texture | null,
   ) {
     super();
     this.header = new Header(mascot);
     // Swallow taps that were really the end of a drag.
-    const select = (item: Title) => {
+    const play = (item: Title) => {
       if (!this.dragged) onPlay(item);
     };
-    this.hero = new Hero(catalog.featured, select);
-    this.rows = catalog.shelves.map((s) => new Row(s, select));
+    const info = (item: Title) => {
+      if (!this.dragged) onInfo(item);
+    };
+    this.hero = new Hero(catalog.featured, play, info);
+    this.rows = catalog.shelves.map((s) => new Row(s, info));
     this.content.addChild(this.hero, ...this.rows);
     this.addChild(this.content, this.header);
     this.bindInput();

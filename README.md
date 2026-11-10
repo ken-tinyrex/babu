@@ -24,7 +24,9 @@ src/
   safeArea.ts         reads iOS notch / home-indicator insets
   data/
     types.ts          Title, Shelf, Catalog, VideoSource
-    catalog.ts        demo catalog + FEATURED_VIDEO_URL
+    catalog.ts        demo catalog + FEATURED_VIDEO_URL + featured movie details
+    movieInfo.ts      movie details from TMDB (optional key) or Wikipedia (no key)
+  details/Details.ts  movie details page (DOM sheet over the canvas)
   player/Player.ts    DOM player: MP4, HLS (native on Safari, hls.js elsewhere), optional embed iframe
   ui/
     HomeScreen.ts     page layout + unified touch / mouse-drag / wheel scrolling
@@ -58,6 +60,16 @@ If it doesn't play in Babu, the host is probably blocking it:
 - **Hotlink protection** (only plays on the host's own site): use the host's embed player via `{ kind: 'embed', url }`, or host the file yourself.
 
 For reliable streaming you control, upload the file to storage with a CDN (e.g. Cloudflare R2, Bunny, S3 + CloudFront) and use that URL.
+
+## Movie details
+
+Tapping a poster or **More info** opens a details page. Details come from, in order:
+
+1. **TMDB**, if `VITE_TMDB_TOKEN` is set in `.env.local` (free "API Read Access Token" from https://www.themoviedb.org/settings/api) and the title has `meta.tmdbId`. Adds backdrop, rating, tagline, genres and cast photos.
+2. **Wikipedia** (no key), if the title has `meta.wikiTitle`. Adds the poster and an "About the film" summary.
+3. The title's own `meta` in `catalog.ts` (director, cast, credits, rating), used as the fallback.
+
+`VITE_` variables end up in the website bundle, so the TMDB token is public. It's read-only, but if that matters, fetch TMDB from a small server instead.
 
 ## Mobile notes
 

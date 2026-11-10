@@ -37,12 +37,40 @@ function demoTitle(i: number): Title {
 
 const range = (start: number, n: number) => Array.from({ length: n }, (_, i) => demoTitle(start + i));
 
+/**
+ * Local details are the fallback; movieInfo.ts layers TMDB (with a token) or
+ * Wikipedia (synopsis + poster, no key) on top at startup.
+ */
 const featured: Title = {
-  id: 'featured',
-  name: 'Babu Presents',
-  description: 'Streaming from FEATURED_VIDEO_URL in src/data/catalog.ts.',
-  color: 0xff4d6d,
+  id: 'the-tree-of-life',
+  name: 'The Tree of Life',
+  description:
+    'In 1950s Texas, a boy grows up between a stern father and a gentle mother. Decades later, the grown son searches those memories for meaning, set against the birth of the universe itself.',
+  year: 2011,
+  duration: '2h 19m',
+  color: 0x3f6b52,
   source: FEATURED_VIDEO_URL ? { kind: 'file', url: FEATURED_VIDEO_URL } : DEMO_HLS,
+  meta: {
+    tmdbId: 8967,
+    wikiTitle: 'The_Tree_of_Life_(film)',
+    genres: ['Drama'],
+    certification: 'PG-13',
+    director: 'Terrence Malick',
+    cast: [
+      { name: 'Brad Pitt', character: 'Mr. O’Brien' },
+      { name: 'Jessica Chastain', character: 'Mrs. O’Brien' },
+      { name: 'Sean Penn', character: 'Jack' },
+      { name: 'Hunter McCracken', character: 'Young Jack' },
+      { name: 'Laramie Eppler', character: 'R.L.' },
+      { name: 'Tye Sheridan', character: 'Steve' },
+    ],
+    facts: [
+      { label: 'Written by', value: 'Terrence Malick' },
+      { label: 'Music', value: 'Alexandre Desplat' },
+      { label: 'Cinematography', value: 'Emmanuel Lubezki' },
+      { label: 'Awards', value: 'Palme d’Or (Cannes 2011) · 3 Academy Award nominations' },
+    ],
+  },
 };
 
 export const catalog: Catalog = {

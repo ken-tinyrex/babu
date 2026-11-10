@@ -46,7 +46,7 @@ export class PosterCard extends Container {
     });
     this.on('pointerout', () => (this.targetScale = 1));
 
-    if (item.thumbnail) void this.loadArt(item.thumbnail);
+    if (item.poster) void this.loadArt(item.poster);
   }
 
   resize(w: number, h: number) {
