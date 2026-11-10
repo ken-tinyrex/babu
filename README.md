@@ -22,8 +22,6 @@ firebase login          # once
 npm run deploy          # build + firebase deploy --only hosting
 ```
 
-Production builds play the demo stream for the real movie titles; the movie URLs in `catalog.ts` are used only in `npm run dev` (see the comment there).
-
 ## Project layout
 
 ```
