@@ -13,6 +13,17 @@ npm run preview    # serve the production build
 
 To test on a phone, open the `Network:` URL that `npm run dev` prints, from a device on the same Wi-Fi.
 
+## Deploy
+
+Hosted on Firebase as the `babutv` site in the `pokecard-summoner` project: https://babutv.web.app
+
+```bash
+firebase login          # once
+npm run deploy          # build + firebase deploy --only hosting
+```
+
+Production builds play the demo stream for the real movie titles; the movie URLs in `catalog.ts` are used only in `npm run dev` (see the comment there).
+
 ## Project layout
 
 ```

@@ -3,6 +3,10 @@ import type { Catalog, Title, VideoSource } from './types';
 /**
  * Direct stream URLs (.mp4 or .m3u8) for the real titles below.
  * See README "Adding your own video" for how to find one.
+ *
+ * Used only in local dev (`npm run dev`). Production builds (Firebase) play the demo
+ * stream instead, and these strings are stripped from the bundle, so unlicensed copies
+ * never ship on the public site. Swap in licensed URLs before removing the DEV check.
  */
 const TREE_OF_LIFE_URL =
   'https://odd-silence-e10a.leland7a32f.workers.dev/z9HR0x7HM6Lb592ZDUd7NS5e8z92Np9y8r15b5w6S8_ZXs2d7z9XJo8x7a40c6Na4p90NDEd7NTp93ODx70Jm6Nb5Y0o8d7PTE0Nr14c6OS4b5NDt3f9Mq0Mb5Jm6Bb5PTEd7Jm6Nb5Y0Fm6PUNIUp99NRSZb5z9m6l59NDMn7y8XM9MTt31Lq0Ib5Nr141NS4c6NSZ0v5XBo8PTMn7x72o8m6PUJm6SFJCSo8FPTo8RZJn7N0PTAn7w6XJh1x7a405NS4c6Nq0Mf9Ma4Uf9Nq0Qn7Y2c6k4ZW50VHo8d7ZT0d7Jm6k4a4PTQa4Jn7o8p9PTQa4MDx7c6Mq0Q0OTE4Jm6Jj3x7q004/MTx75NDMb5Na4x75Nd7/6202_rebmevoN_01-%5BANONMP4.TO%5D.mp4';
@@ -50,7 +54,7 @@ const treeOfLife: Title = {
   year: 2011,
   duration: '2h 19m',
   color: 0x3f6b52,
-  source: { kind: 'file', url: TREE_OF_LIFE_URL },
+  source: import.meta.env.DEV ? { kind: 'file', url: TREE_OF_LIFE_URL } : DEMO_HLS,
   meta: {
     tmdbId: 8967,
     wikiTitle: 'The_Tree_of_Life_(film)',
@@ -82,7 +86,7 @@ const odyssey: Title = {
   year: 2026,
   duration: '2h 53m',
   color: 0x1d3557,
-  source: { kind: 'file', url: ODYSSEY_URL },
+  source: import.meta.env.DEV ? { kind: 'file', url: ODYSSEY_URL } : DEMO_HLS,
   meta: {
     tmdbId: 1368337,
     wikiTitle: 'The_Odyssey_(2026_film)',
