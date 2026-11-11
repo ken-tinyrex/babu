@@ -1,5 +1,5 @@
 import {
-  collection, deleteDoc, doc, getDocs, limit, orderBy, query, serverTimestamp, setDoc,
+  collection, deleteDoc, deleteField, doc, getDocs, limit, orderBy, query, serverTimestamp, setDoc, updateDoc,
 } from 'firebase/firestore/lite';
 import { db } from '../firebase';
 import type { CastMember, Fact, MovieMeta, Title } from './types';
@@ -42,6 +42,20 @@ export async function saveTitle(t: Title, addedBy: string): Promise<void> {
   const data = JSON.parse(JSON.stringify(t)) as Record<string, unknown>;
   delete data.id;
   await setDoc(doc(db, COLLECTION, t.id), { ...data, addedBy, createdAt: serverTimestamp() });
+}
+
+/**
+ * Saves edits to an existing title. Keeps its id, createdAt (position in "Recently Added")
+ * and addedBy; optional fields that were cleared are removed from the document.
+ */
+export async function updateTitle(t: Title): Promise<void> {
+  const data = JSON.parse(JSON.stringify(t)) as Record<string, unknown>;
+  delete data.id;
+  const patch: Record<string, unknown> = { ...data, updatedAt: serverTimestamp() };
+  for (const k of ['description', 'year', 'duration', 'poster', 'backdrop', 'meta']) {
+    if (!(k in data)) patch[k] = deleteField();
+  }
+  await updateDoc(doc(db, COLLECTION, t.id), patch);
 }
 
 export async function deleteTitle(id: string): Promise<void> {

@@ -347,6 +347,15 @@ textarea:focus {
   border-top: 0;
 }
 
+.mine li.is-editing {
+  margin: 0 -10px;
+  padding-left: 10px;
+  padding-right: 10px;
+  border-radius: 10px;
+  background: rgba(255, 77, 109, 0.1);
+  outline: 1px solid rgba(255, 77, 109, 0.4);
+}
+
 .mine img,
 .mine .mine__ph {
   width: 40px;

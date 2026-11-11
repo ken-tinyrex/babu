@@ -2,7 +2,7 @@ import { GoogleAuthProvider, getAuth, onAuthStateChanged, signInWithPopup, signO
 import { buildTitle, searchMovies, type Candidate } from '../data/lookup';
 import { formatRuntime } from '../data/movieInfo';
 import type { Title } from '../data/types';
-import { deleteTitle, loadUserTitles, saveTitle, slugify } from '../data/userTitles';
+import { deleteTitle, loadUserTitles, saveTitle, slugify, updateTitle } from '../data/userTitles';
 import { firebaseApp, OWNER_EMAIL } from '../firebase';
 
 // ---------- tiny DOM helpers (all text via textContent: API data is untrusted) ----------
@@ -52,6 +52,11 @@ const auth = getAuth(firebaseApp);
 let user: User | null = null;
 let current: Title | null = null;
 let videoSeconds: number | null = null;
+/** Firestore id of the movie being edited, or null when adding a new one. */
+let editingId: string | null = null;
+/** ?edit=<id> from the address bar, applied once the movie list has loaded. */
+let pendingEditId = new URLSearchParams(location.search).get('edit');
+let mineCache: Title[] = [];
 
 const isOwner = () => !!user && user.email === OWNER_EMAIL && user.emailVerified;
 
@@ -289,19 +294,21 @@ function renderPreview() {
 
   const url = urlInput.value.trim();
   const canSave = isOwner() && validHttps(url);
-  const add = button('Add to Babu', 'btn btn--primary', () => void save());
+  const add = button(editingId ? 'Save changes' : 'Add to Babu', 'btn btn--primary', () => void save());
   add.disabled = !canSave;
   const hint = !isOwner()
-    ? `Sign in as ${OWNER_EMAIL} to add.`
+    ? `Sign in as ${OWNER_EMAIL} to ${editingId ? 'edit' : 'add'}.`
     : !validHttps(url)
       ? 'Paste the video URL above first.'
       : '';
 
   const actions = h('div', 'preview__actions');
   actions.append(add);
+  if (editingId) actions.append(button('Cancel', 'btn btn--ghost', () => stopEdit()));
   if (hint) actions.append(h('span', 'field__hint', hint));
 
-  preview.replaceChildren(h('h2', '', 'Preview'), grid, desc.wrap, actions);
+  preview.hidden = false;
+  preview.replaceChildren(h('h2', '', editingId ? 'Edit details' : 'Preview'), grid, desc.wrap, actions);
 
   // Keep edits when the preview re-renders (e.g. after sign-in or the video check).
   const sync = () => {
@@ -320,30 +327,85 @@ async function save() {
   const url = urlInput.value.trim();
   if (!validHttps(url)) return;
   const t: Title = { ...current, source: { kind: 'file', url } };
-  t.id = slugify(t.name, t.year);
+  const editing = editingId;
+  // Edits keep the original document id even if the title changes.
+  t.id = editing ?? slugify(t.name, t.year);
   const add = $('preview').querySelector<HTMLButtonElement>('.btn--primary');
+  const label = add?.textContent ?? '';
   if (add) {
     add.disabled = true;
-    add.textContent = 'Adding…';
+    add.textContent = editing ? 'Saving…' : 'Adding…';
   }
   try {
-    await saveTitle(t, user.email ?? OWNER_EMAIL);
-    toast(`${t.name} was added to Babu.`, { href: '/', text: 'Open Babu →' });
-    current = null;
-    $('preview').hidden = true;
-    $('results').hidden = true;
-    urlInput.value = '';
-    titleInput.value = '';
-    yearInput.value = '';
-    setVideoStatus('A direct link to an .mp4 or .m3u8 file.', '');
+    if (editing) {
+      await updateTitle(t);
+      toast(`Saved changes to ${t.name}.`, { href: '/', text: 'Open Babu →' });
+    } else {
+      await saveTitle(t, user.email ?? OWNER_EMAIL);
+      toast(`${t.name} was added to Babu.`, { href: '/', text: 'Open Babu →' });
+    }
+    resetForm();
     await renderMine();
   } catch (err) {
     const code = (err as { code?: string }).code ?? '';
-    toast(code === 'permission-denied' ? 'Not allowed: this account can’t add movies.' : 'Saving failed. Try again.');
+    toast(
+      code === 'permission-denied'
+        ? 'Not allowed: this account can’t change movies.'
+        : code === 'not-found'
+          ? 'That movie no longer exists (it may have been deleted).'
+          : 'Saving failed. Try again.',
+    );
     if (add) {
       add.disabled = false;
-      add.textContent = 'Add to Babu';
+      add.textContent = label;
     }
+  }
+}
+
+// ---------- edit mode ----------
+
+const heading = document.querySelector('h1')!;
+const lead = document.querySelector('.lead')!;
+
+function resetForm() {
+  current = null;
+  editingId = null;
+  $('preview').hidden = true;
+  $('results').hidden = true;
+  urlInput.value = '';
+  titleInput.value = '';
+  yearInput.value = '';
+  videoSeconds = null;
+  setVideoStatus('A direct link to an .mp4 or .m3u8 file.', '');
+  heading.textContent = 'Add a movie';
+  lead.textContent = 'Paste a video link and the movie’s title. Babu finds the details and puts it on the homepage.';
+  history.replaceState(null, '', location.pathname);
+  highlightEditing();
+}
+
+function startEdit(t: Title) {
+  editingId = t.id;
+  current = structuredClone(t);
+  urlInput.value = t.source.url;
+  titleInput.value = t.name;
+  yearInput.value = t.year ? String(t.year) : '';
+  $('results').hidden = true;
+  heading.textContent = `Edit “${t.name}”`;
+  lead.textContent = 'Change the video URL or details, then Save changes. To re-match the film, use Find movie.';
+  history.replaceState(null, '', `${location.pathname}?edit=${encodeURIComponent(t.id)}`);
+  checkVideo();
+  renderPreview();
+  highlightEditing();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function stopEdit() {
+  resetForm();
+}
+
+function highlightEditing() {
+  for (const li of $('mine').querySelectorAll<HTMLLIElement>('li')) {
+    li.classList.toggle('is-editing', li.dataset.id === editingId);
   }
 }
 
@@ -351,6 +413,7 @@ async function save() {
 
 async function renderMine() {
   const titles = await loadUserTitles();
+  mineCache = titles;
   const card = $('mine-card');
   const list = $('mine');
   card.hidden = titles.length === 0;
@@ -369,12 +432,15 @@ async function renderMine() {
     const text = h('div', 'mine__text');
     text.append(h('div', 'mine__name', t.name), h('div', 'mine__meta', [t.year, t.duration].filter(Boolean).join(' · ')));
     li.append(text);
+    li.dataset.id = t.id;
     if (isOwner()) {
+      li.append(button('Edit', 'btn btn--ghost btn--small', () => startEdit(t)));
       li.append(
         button('Delete', 'btn btn--danger btn--small', async () => {
           if (!confirm(`Remove “${t.name}” from Babu?`)) return;
           try {
             await deleteTitle(t.id);
+            if (editingId === t.id) resetForm();
             toast(`${t.name} was removed.`);
             await renderMine();
           } catch {
@@ -384,5 +450,14 @@ async function renderMine() {
       );
     }
     list.append(li);
+  }
+  highlightEditing();
+
+  // Open /upload?edit=<id> once we know who's signed in and the movie exists.
+  if (pendingEditId && isOwner()) {
+    const target = mineCache.find((t) => t.id === pendingEditId);
+    pendingEditId = null;
+    if (target) startEdit(target);
+    else toast('That movie wasn’t found. It may have been deleted.');
   }
 }
