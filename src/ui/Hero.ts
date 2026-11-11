@@ -83,6 +83,8 @@ export class Hero extends Container {
   private h = 0;
   private bp: Metrics['bp'] = 'desktop';
   private landscape = false;
+  /** Bottom of the header bar; the side poster starts below it. */
+  private headerBottom = 0;
   private topGrad: FillGradient | null = null;
   private bottomGrad: FillGradient | null = null;
 
@@ -198,12 +200,13 @@ export class Hero extends Container {
     y -= 8 + this.titleText.height;
     this.titleText.position.set(left, y);
 
-    this.fitArt(m.headerH + safe.top);
+    this.headerBottom = m.headerH + safe.top;
+    this.fitArt();
   }
 
   private async loadArt(url: string) {
     try {
-      const tex = await Assets.load<Texture>(url);
+      const tex = await Assets.load<Texture>({ src: url, parser: 'texture' });
       if (this.destroyed) return;
       this.cover = new Sprite(tex);
       this.cover.anchor.set(0.5);
@@ -220,7 +223,7 @@ export class Hero extends Container {
     }
   }
 
-  private fitArt(headerBottom = 0) {
+  private fitArt() {
     if (!this.cover || !this.w) return;
     const t = this.cover.texture;
     const { w, h } = this;
@@ -236,7 +239,7 @@ export class Hero extends Container {
 
     this.posterPanel.visible = sidePoster && !!this.posterSprite;
     if (!this.posterPanel.visible || !this.posterSprite) return;
-    const top = Math.max(headerBottom, 24) + 16;
+    const top = Math.max(this.headerBottom, 24) + 16;
     const ph = Math.min(h - top - 40, 520);
     const pw = ph * (t.width / t.height);
     const r = 12;

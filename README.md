@@ -23,6 +23,25 @@ Open `/upload` (https://babutv.web.app/upload or http://localhost:5173/upload):
 
 Added movies are stored in Firestore (`babu_titles` in the `pokecard-summoner` project) and appear in a **Recently Added** row on the homepage. Anyone can read them; only `kdkeann@gmail.com` (Google sign-in) can add or delete. The Firestore rules live in the **pos-sytem** repo (`firestore.rules`) because the project's rules are shared. Change and deploy them there, never from this repo.
 
+## Jellyfin
+
+Babu can show and play the movies on your Jellyfin server (Jellyfin serves the files; Babu is the UI).
+
+1. **Start a tunnel** (Jellyfin must be reachable over https from the live site):
+   ```bash
+   npm run tunnel            # quick Cloudflare tunnel → opens babutv.web.app/upload with the new link
+   npm run tunnel -- --local # same, but opens http://localhost:5173/upload
+   ```
+   Keep it running. The `https://….trycloudflare.com` link changes every time it restarts.
+2. **Save the link** on `/upload` → *Jellyfin server link* (signed in as the owner). It's stored in Firestore
+   (`babu_config/jellyfin`), so the live site follows it immediately, with no redeploy. Opening
+   `/upload#jellyfin=<link>` (what `npm run tunnel` does) saves it automatically after checking it works.
+3. **Sign in** on the homepage (top-right pill) with a Jellyfin username and password. Your library appears as
+   Continue Watching, New in Your Library and genre rows; placeholder demo titles are hidden.
+
+Playback asks Jellyfin for the best method: direct file when the browser can play it, otherwise an HLS transcode.
+Watch progress is reported back, so Continue Watching stays in sync with other Jellyfin apps.
+
 ## Deploy
 
 Hosted on Firebase as the `babutv` site in the `pokecard-summoner` project: https://babutv.web.app
@@ -47,7 +66,9 @@ src/
     movieInfo.ts      movie details from TMDB (optional key) or Wikipedia (no key)
     lookup.ts         search movies by title, build a Title from TMDB/Wikipedia
     userTitles.ts     Firestore: load/save/delete movies added from /upload
+    serverConfig.ts   Firestore: current Jellyfin server link
   firebase.ts         Firebase app + Firestore Lite (public web config)
+  jellyfin/           Jellyfin client (sign-in, library, playback) + sign-in sheet
   upload/             /upload page: video URL + movie lookup + save
   details/Details.ts  movie details page (DOM sheet over the canvas)
   player/Player.ts    DOM player: MP4, HLS (native on Safari, hls.js elsewhere), optional embed iframe

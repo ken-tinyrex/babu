@@ -415,3 +415,31 @@ textarea:focus {
     animation: none;
   }
 }
+
+.server__current {
+  margin: -6px 0 14px;
+  word-break: break-all;
+}
+
+#server-card .row {
+  align-items: stretch;
+}
+
+#server-card .row .btn {
+  flex: none;
+}
+
+.server__sub {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.viewer__row {
+  flex-wrap: wrap;
+  margin: 12px 0 0;
+}
+
+.viewer__row input {
+  min-width: 160px;
+}

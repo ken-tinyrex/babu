@@ -1,5 +1,6 @@
 import type Hls from 'hls.js';
 import type { Title } from '../data/types';
+import type { PlaybackHandle } from '../jellyfin/client';
 import { suppressGhostClicks } from '../ghostClick';
 
 const isHls = (url: string) => /\.m3u8(\?|$)/i.test(url);
@@ -63,6 +64,8 @@ export class Player {
   /** Removes every listener added for the current video in one go. */
   private session: AbortController | null = null;
   private hideTimer = 0;
+  /** Jellyfin playback session (progress reporting) for the current video, if any. */
+  private jf: PlaybackHandle | null = null;
 
   constructor() {
     this.root.querySelector('.player__close')!.addEventListener('click', () => this.close());
@@ -100,7 +103,27 @@ export class Player {
       return;
     }
 
-    const url = title.source.url;
+    let url: string;
+    let hlsStream: boolean;
+    let startAt = 0;
+    if (title.source.kind === 'jellyfin') {
+      // Ask Jellyfin how to play it: direct file if the browser can, otherwise an HLS transcode.
+      try {
+        const { startPlayback } = await import('../jellyfin/client');
+        const handle = await startPlayback(title.source.itemId, title.source.resumeSeconds);
+        if (token !== this.token) return handle.stop();
+        this.jf = handle;
+        url = handle.url;
+        hlsStream = handle.isHls;
+        startAt = handle.startAt;
+      } catch (err) {
+        return this.showError((err as Error).message || 'Jellyfin could not start this movie.');
+      }
+    } else {
+      url = title.source.url;
+      hlsStream = isHls(url);
+    }
+
     const video = document.createElement('video');
     video.playsInline = true;
     video.autoplay = true;
@@ -114,10 +137,20 @@ export class Player {
     for (const ev of ['waiting', 'seeking', 'loadstart']) video.addEventListener(ev, () => setLoading(true), on);
     for (const ev of ['playing', 'canplay', 'seeked', 'pause']) video.addEventListener(ev, () => setLoading(false), on);
     video.addEventListener('error', () => this.showError('This video could not be played.'), on);
+    if (startAt) {
+      // Resume where the viewer left off (Jellyfin "Continue Watching").
+      video.addEventListener('loadedmetadata', () => {
+        if (video.duration > startAt + 5) video.currentTime = startAt;
+      }, { ...on, once: true });
+    }
+    if (this.jf) {
+      const jf = this.jf;
+      video.addEventListener('playing', () => jf.attach(video), { ...on, once: true });
+    }
 
     this.buildControls(video, this.session.signal);
 
-    if (isHls(url) && !video.canPlayType('application/vnd.apple.mpegurl')) {
+    if (hlsStream && !video.canPlayType('application/vnd.apple.mpegurl')) {
       // Chrome / Firefox / Android: MSE via hls.js (loaded on demand).
       const { default: HlsCtor } = await import('hls.js');
       if (token !== this.token) return;
@@ -319,6 +352,8 @@ export class Player {
     clearTimeout(this.hideTimer);
     this.session?.abort();
     this.session = null;
+    this.jf?.stop();
+    this.jf = null;
     this.hls?.destroy();
     this.hls = null;
     if (this.video) {

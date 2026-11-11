@@ -89,7 +89,7 @@ export class PosterCard extends Container {
 
   private async loadArt(url: string) {
     try {
-      const tex = await Assets.load<Texture>(url);
+      const tex = await Assets.load<Texture>({ src: url, parser: 'texture' });
       if (this.destroyed) return;
       this.art = new Sprite(tex);
       this.art.anchor.set(0.5);

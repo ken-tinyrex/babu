@@ -17,8 +17,11 @@ export class Header extends Container {
   private nav: Text[];
   private time = 0;
   private mascotScale = 1;
+  private account = new Container();
+  private accountBg = new Graphics();
+  private accountText: Text;
 
-  constructor(mascotTexture: Texture | null) {
+  constructor(mascotTexture: Texture | null, account?: { label: string; onTap: () => void }) {
     super();
     this.logo = new Text({
       text: 'Babu',
@@ -48,7 +51,19 @@ export class Header extends Container {
       t.cursor = 'pointer';
       return t;
     });
-    this.addChild(this.bg, this.brand, ...this.nav);
+    // Account pill (top right): "Sign in" or the Jellyfin user's name.
+    this.accountText = new Text({
+      text: account?.label ?? '',
+      style: { fontFamily: theme.font, fontWeight: '700', fill: theme.text },
+    });
+    this.accountText.anchor.set(0.5);
+    this.account.addChild(this.accountBg, this.accountText);
+    this.account.visible = !!account;
+    this.account.eventMode = 'static';
+    this.account.cursor = 'pointer';
+    if (account) this.account.on('pointertap', account.onTap);
+
+    this.addChild(this.bg, this.brand, ...this.nav, this.account);
   }
 
   layout(m: Metrics, width: number, safe: Insets) {
@@ -77,6 +92,15 @@ export class Header extends Container {
     this.mascot?.position.set(this.logo.width / 2, mascotH);
 
     const navY = blockTop + this.logo.y + textH / 2;
+
+    if (this.account.visible) {
+      this.accountText.style.fontSize = m.bp === 'mobile' ? 14 : 15;
+      const pw = Math.round(this.accountText.width + 28);
+      const ph = m.bp === 'mobile' ? 34 : 38;
+      this.accountBg.clear().roundRect(0, 0, pw, ph, ph / 2).fill({ color: 0xffffff, alpha: 0.14 }).stroke({ color: 0xffffff, alpha: 0.25, width: 1 });
+      this.accountText.position.set(pw / 2, ph / 2);
+      this.account.position.set(width - m.gutter - safe.right - pw, safe.top + (m.headerH - ph) / 2);
+    }
     const showNav = m.bp !== 'mobile';
     let x = left + Math.max(this.logo.width, this.mascot?.width ?? 0) + (m.bp === 'desktop' ? 40 : 28);
     for (const t of this.nav) {

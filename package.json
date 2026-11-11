@@ -8,7 +8,8 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host",
     "typecheck": "tsc --noEmit",
-    "deploy": "npm run build && firebase deploy --only hosting"
+    "deploy": "npm run build && firebase deploy --only hosting",
+    "tunnel": "node scripts/jellyfin-tunnel.mjs"
   },
   "dependencies": {
     "firebase": "^13.2.0",

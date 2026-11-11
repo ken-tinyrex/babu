@@ -2,8 +2,13 @@
  * Where a title's video comes from.
  * - file:  a direct stream URL (.mp4 or HLS .m3u8), played in Babu's own <video> player.
  * - embed: a third-party player page, shown in an iframe (use only when no direct URL exists).
+ * - jellyfin: a movie in the user's Jellyfin library.
  */
-export type VideoSource = { kind: 'file'; url: string } | { kind: 'embed'; url: string };
+export type VideoSource =
+  | { kind: 'file'; url: string }
+  | { kind: 'embed'; url: string }
+  /** Streamed from the user's Jellyfin server (resolved at play time). */
+  | { kind: 'jellyfin'; itemId: string; resumeSeconds?: number };
 
 export interface CastMember {
   name: string;

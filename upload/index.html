@@ -26,6 +26,32 @@
 
       <div class="notice" id="signin-notice" hidden></div>
 
+      <section class="card" id="server-card">
+        <h2>Jellyfin server link</h2>
+        <p class="field__hint server__current" id="server-current">Loading…</p>
+        <label class="field">
+          <span class="field__label">New link (e.g. the Cloudflare tunnel address)</span>
+          <div class="row">
+            <input id="server-url" class="grow" type="url" inputmode="url" placeholder="https://something.trycloudflare.com" autocomplete="off" spellcheck="false" />
+            <button class="btn btn--primary" id="server-save" type="button">Save</button>
+          </div>
+          <span class="field__hint" id="server-status">The live site switches to the new link right away. No redeploy needed.</span>
+        </label>
+
+        <h2 class="server__sub">Viewer account</h2>
+        <p class="field__hint server__current" id="viewer-current">Loading…</p>
+        <p class="field__hint">
+          Babu signs in to Jellyfin with this account automatically, so visitors never see a login.
+          Use a <strong>separate, non-admin</strong> Jellyfin user: only its access token is saved, and anyone visiting the site can read it.
+        </p>
+        <div class="row viewer__row">
+          <input id="viewer-user" class="grow" type="text" placeholder="Jellyfin username" autocomplete="off" autocapitalize="off" spellcheck="false" />
+          <input id="viewer-pass" class="grow" type="password" placeholder="Password" autocomplete="new-password" />
+          <button class="btn btn--primary" id="viewer-save" type="button">Connect</button>
+        </div>
+        <span class="field__hint" id="viewer-status"></span>
+      </section>
+
       <section class="card">
         <label class="field">
           <span class="field__label">1. Video URL</span>

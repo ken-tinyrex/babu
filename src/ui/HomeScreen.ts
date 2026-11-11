@@ -40,9 +40,10 @@ export class HomeScreen extends Container {
     onPlay: (item: Title) => void,
     onInfo: (item: Title) => void,
     mascot: Texture | null,
+    account?: { label: string; onTap: () => void },
   ) {
     super();
-    this.header = new Header(mascot);
+    this.header = new Header(mascot, account);
     // Swallow taps that were really the end of a drag.
     const play = (item: Title) => {
       if (!this.dragged) onPlay(item);

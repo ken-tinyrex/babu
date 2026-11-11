@@ -4,6 +4,7 @@ import { formatRuntime } from '../data/movieInfo';
 import type { Title } from '../data/types';
 import { deleteTitle, loadUserTitles, saveTitle, slugify, updateTitle } from '../data/userTitles';
 import { firebaseApp, OWNER_EMAIL } from '../firebase';
+import { connectViewer, loadJellyfinConfig, normalizeServerUrl, probeJellyfin, saveJellyfinUrl, saveJellyfinViewer } from '../data/serverConfig';
 
 // ---------- tiny DOM helpers (all text via textContent: API data is untrusted) ----------
 
@@ -91,6 +92,7 @@ function renderAuth() {
   }
   renderPreview();
   void renderMine();
+  void renderServer();
 }
 
 async function signIn() {
@@ -386,7 +388,7 @@ function resetForm() {
 function startEdit(t: Title) {
   editingId = t.id;
   current = structuredClone(t);
-  urlInput.value = t.source.url;
+  urlInput.value = t.source.kind === 'jellyfin' ? '' : t.source.url;
   titleInput.value = t.name;
   yearInput.value = t.year ? String(t.year) : '';
   $('results').hidden = true;
@@ -461,3 +463,127 @@ async function renderMine() {
     else toast('That movie wasn’t found. It may have been deleted.');
   }
 }
+
+// ---------- Jellyfin server link ----------
+
+const serverInput = $<HTMLInputElement>('server-url');
+const serverSave = $<HTMLButtonElement>('server-save');
+/** Link handed over by `npm run tunnel` as /upload#jellyfin=<url>; saved automatically once signed in. */
+let pendingServer = (() => {
+  const v = new URLSearchParams(location.hash.slice(1)).get('jellyfin');
+  return v ? normalizeServerUrl(v) : null;
+})();
+if (pendingServer) serverInput.value = pendingServer;
+
+function setServerStatus(text: string, state: '' | 'ok' | 'bad') {
+  const el = $('server-status');
+  el.textContent = text;
+  el.className = `field__hint${state ? ` is-${state}` : ''}`;
+}
+
+async function renderServer() {
+  const cur = $('server-current');
+  const cfg = await loadJellyfinConfig();
+  if (!cfg) {
+    cur.textContent = 'No server link saved yet.';
+  } else {
+    cur.textContent = `Current: ${cfg.url}${cfg.updatedAt ? ` · updated ${cfg.updatedAt.toLocaleString()}` : ''} · checking…`;
+    const probe = await probeJellyfin(cfg.url);
+    cur.textContent = `Current: ${cfg.url} · ${probe.ok ? `✓ online (${probe.name}, Jellyfin ${probe.version})` : `✗ ${probe.reason}`}`;
+    cur.className = `field__hint server__current ${probe.ok ? 'is-ok' : 'is-bad'}`;
+  }
+  serverSave.disabled = !isOwner();
+  viewerSave.disabled = !isOwner() || !cfg;
+  if (!isOwner()) setServerStatus(`Sign in as ${OWNER_EMAIL} to change the link.`, '');
+  const vc = $('viewer-current');
+  vc.textContent = cfg?.viewer
+    ? `Babu signs in as “${cfg.viewer.userName}”.`
+    : 'No viewer account yet. Visitors won’t see your Jellyfin library until you connect one.';
+  vc.className = `field__hint server__current ${cfg?.viewer ? 'is-ok' : ''}`;
+  if (!cfg) setViewerStatus('Save a server link first.', '');
+  else if (!isOwner()) setViewerStatus(`Sign in as ${OWNER_EMAIL} to change it.`, '');
+  if (pendingServer && isOwner()) {
+    const url = pendingServer;
+    pendingServer = null;
+    history.replaceState(null, '', location.pathname + location.search);
+    await saveServer(url);
+  }
+}
+
+async function saveServer(raw: string) {
+  const url = normalizeServerUrl(raw);
+  if (!url) return setServerStatus('Enter an https:// link.', 'bad');
+  serverSave.disabled = true;
+  setServerStatus('Checking that Jellyfin answers at this link…', '');
+  const probe = await probeJellyfin(url, 12000);
+  if (!probe.ok) {
+    serverSave.disabled = false;
+    return setServerStatus(`✗ ${probe.reason}. Not saved.`, 'bad');
+  }
+  try {
+    await saveJellyfinUrl(url);
+    serverInput.value = '';
+    setServerStatus(`✓ Saved. Babu now uses ${url} (${probe.name}).`, 'ok');
+    toast('Jellyfin link updated on the live site.');
+    await renderServer();
+  } catch (err) {
+    const code = (err as { code?: string }).code ?? '';
+    setServerStatus(code === 'permission-denied' ? 'Not allowed: the database rule for this setting isn’t deployed yet, or this account can’t change it.' : 'Saving failed. Try again.', 'bad');
+  } finally {
+    serverSave.disabled = !isOwner();
+  }
+}
+
+serverSave.addEventListener('click', () => void saveServer(serverInput.value));
+serverInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') void saveServer(serverInput.value);
+});
+
+// ---------- Jellyfin viewer account ----------
+
+const viewerUser = $<HTMLInputElement>('viewer-user');
+const viewerPass = $<HTMLInputElement>('viewer-pass');
+const viewerSave = $<HTMLButtonElement>('viewer-save');
+
+function setViewerStatus(text: string, state: '' | 'ok' | 'bad') {
+  const el = $('viewer-status');
+  el.textContent = text;
+  el.className = `field__hint${state ? ` is-${state}` : ''}`;
+}
+
+async function saveViewer() {
+  const cfg = await loadJellyfinConfig();
+  if (!cfg) return setViewerStatus('Save a server link first.', 'bad');
+  const username = viewerUser.value.trim();
+  if (!username) return viewerUser.focus();
+  viewerSave.disabled = true;
+  setViewerStatus('Signing in to Jellyfin…', '');
+  try {
+    const { viewer, canDelete } = await connectViewer(cfg.url, username, viewerPass.value);
+    await saveJellyfinViewer(viewer);
+    viewerPass.value = '';
+    setViewerStatus(
+      canDelete
+        ? `✓ Connected as “${viewer.userName}”. Tip: turn off “Allow media deletion” for this user in Jellyfin.`
+        : `✓ Connected as “${viewer.userName}”. Visitors now see your library without signing in.`,
+      'ok',
+    );
+    toast('Jellyfin viewer account saved.');
+    await renderServer();
+  } catch (err) {
+    const code = (err as { code?: string }).code ?? '';
+    setViewerStatus(
+      code === 'permission-denied'
+        ? 'Not allowed: deploy the babu_config database rule (pos-sytem) first.'
+        : (err as Error).message || 'Couldn’t connect.',
+      'bad',
+    );
+  } finally {
+    viewerSave.disabled = !isOwner();
+  }
+}
+
+viewerSave.addEventListener('click', () => void saveViewer());
+viewerPass.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') void saveViewer();
+});
