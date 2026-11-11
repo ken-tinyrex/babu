@@ -64,7 +64,9 @@ interface TmdbMovie {
   release_dates?: { results?: { iso_3166_1: string; release_dates: { certification: string }[] }[] };
 }
 
-async function fromTmdb(t: Title, m: MovieMeta, id: number): Promise<boolean> {
+export const hasTmdb = !!TMDB_TOKEN;
+
+export async function fromTmdb(t: Title, m: MovieMeta, id: number): Promise<boolean> {
   const res = await fetch(
     `https://api.themoviedb.org/3/movie/${id}?append_to_response=credits,release_dates&language=en-US`,
     { headers: { Authorization: `Bearer ${TMDB_TOKEN}`, accept: 'application/json' } },

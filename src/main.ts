@@ -1,6 +1,7 @@
 import { Application, Assets, type Texture } from 'pixi.js';
 import { allTitles, catalog } from './data/catalog';
 import { enrichTitle } from './data/movieInfo';
+import { loadUserTitles } from './data/userTitles';
 import { Details } from './details/Details';
 import { Player } from './player/Player';
 import { theme } from './theme';
@@ -20,13 +21,17 @@ async function boot() {
 
   // Header mascot + movie details for real titles (TMDB / Wikipedia), loaded in parallel.
   // A slow movie API never blocks startup for more than a few seconds.
-  const [mascot] = await Promise.all([
+  const timeout = <T>(ms: number, fallback: T) => new Promise<T>((r) => setTimeout(() => r(fallback), ms));
+  const [mascot, added] = await Promise.all([
     Assets.load<Texture>('/icons/logo.png').catch(() => null),
+    // Movies added from /upload (Firestore); they already carry full details.
+    Promise.race([loadUserTitles(), timeout(4000, [])]),
     Promise.race([
       Promise.all(allTitles(catalog).filter((t) => t.meta).map(enrichTitle)),
-      new Promise((r) => setTimeout(r, 3000)),
+      timeout(3000, undefined),
     ]),
   ]);
+  if (added.length) catalog.shelves.unshift({ id: 'recent', label: 'Recently Added', items: added });
 
   const player = new Player();
   const details = new Details();

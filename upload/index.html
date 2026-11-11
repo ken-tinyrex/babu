@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0b10" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <title>Babu · Add a movie</title>
+    <link rel="stylesheet" href="/src/upload/upload.css" />
+  </head>
+  <body>
+    <header class="top">
+      <a class="brand" href="/">
+        <img src="/icons/logo.png" alt="" width="44" height="38" />
+        <span>Babu</span>
+      </a>
+      <div class="auth" id="auth"></div>
+    </header>
+
+    <main class="wrap">
+      <h1>Add a movie</h1>
+      <p class="lead">Paste a video link and the movie's title. Babu finds the details and puts it on the homepage.</p>
+
+      <div class="notice" id="signin-notice" hidden></div>
+
+      <section class="card">
+        <label class="field">
+          <span class="field__label">1. Video URL</span>
+          <input id="video-url" type="url" inputmode="url" placeholder="https://…/movie.mp4" autocomplete="off" spellcheck="false" />
+          <span class="field__hint" id="video-status">A direct link to an .mp4 or .m3u8 file.</span>
+        </label>
+
+        <div class="row">
+          <label class="field grow">
+            <span class="field__label">2. Movie title</span>
+            <input id="movie-title" type="text" placeholder="The Odyssey" autocomplete="off" />
+          </label>
+          <label class="field year">
+            <span class="field__label">Year</span>
+            <input id="movie-year" type="number" inputmode="numeric" min="1880" max="2100" placeholder="2026" />
+          </label>
+        </div>
+        <button class="btn btn--primary" id="find" type="button">Find movie</button>
+      </section>
+
+      <section id="results" class="results" hidden aria-live="polite"></section>
+
+      <section id="preview" class="card preview" hidden></section>
+
+      <section class="card" id="mine-card" hidden>
+        <h2>Added movies</h2>
+        <ul class="mine" id="mine"></ul>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" hidden></div>
+
+    <script type="module" src="/src/upload/main.ts"></script>
+  </body>
+</html>

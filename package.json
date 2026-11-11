@@ -11,6 +11,7 @@
     "deploy": "npm run build && firebase deploy --only hosting"
   },
   "dependencies": {
+    "firebase": "^13.2.0",
     "hls.js": "^1.7.4",
     "pixi.js": "^8.22.0"
   },

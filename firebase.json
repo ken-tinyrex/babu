@@ -5,6 +5,14 @@
         "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
         "rewrites": [
             {
+                "source": "/upload",
+                "destination": "/upload/index.html"
+            },
+            {
+                "source": "/upload/**",
+                "destination": "/upload/index.html"
+            },
+            {
                 "source": "**",
                 "destination": "/index.html"
             }

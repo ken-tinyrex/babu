@@ -13,6 +13,16 @@ npm run preview    # serve the production build
 
 To test on a phone, open the `Network:` URL that `npm run dev` prints, from a device on the same Wi-Fi.
 
+## Adding movies from the browser (/upload)
+
+Open `/upload` (https://babutv.web.app/upload or http://localhost:5173/upload):
+
+1. Paste a direct video URL (.mp4 / .m3u8); the page checks that it plays.
+2. Type the movie title (and year if needed) → **Find movie** → pick the right result.
+3. Review the details fetched from TMDB/Wikipedia (title, year, runtime, genres and synopsis are editable) → **Add to Babu**.
+
+Added movies are stored in Firestore (`babu_titles` in the `pokecard-summoner` project) and appear in a **Recently Added** row on the homepage. Anyone can read them; only `kdkeann@gmail.com` (Google sign-in) can add or delete. The Firestore rules live in the **pos-sytem** repo (`firestore.rules`) because the project's rules are shared. Change and deploy them there, never from this repo.
+
 ## Deploy
 
 Hosted on Firebase as the `babutv` site in the `pokecard-summoner` project: https://babutv.web.app
@@ -35,6 +45,10 @@ src/
     types.ts          Title, Shelf, Catalog, VideoSource
     catalog.ts        catalog: real titles (video URL + details) and demo placeholders
     movieInfo.ts      movie details from TMDB (optional key) or Wikipedia (no key)
+    lookup.ts         search movies by title, build a Title from TMDB/Wikipedia
+    userTitles.ts     Firestore: load/save/delete movies added from /upload
+  firebase.ts         Firebase app + Firestore Lite (public web config)
+  upload/             /upload page: video URL + movie lookup + save
   details/Details.ts  movie details page (DOM sheet over the canvas)
   player/Player.ts    DOM player: MP4, HLS (native on Safari, hls.js elsewhere), optional embed iframe
   ui/
