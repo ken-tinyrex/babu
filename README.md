@@ -97,7 +97,7 @@ Babu needs the **direct** video URL, not the address of a watch page (a page lik
 1. Open the watch page in desktop Chrome and start the video.
 2. Open DevTools (`Cmd+Opt+I`) → **Network** tab → filter **Media** (or type `mp4` / `m3u8` in the filter box).
 3. Right-click the request → **Copy → Copy URL**.
-4. In `src/data/catalog.ts`, copy an existing real title (e.g. `odyssey`), set `source: { kind: 'file', url }` to your URL, and add it to a shelf.
+4. Paste it on the `/upload` page with the movie title (see below). Babu fetches the details and adds it.
 
 If it doesn't play in Babu, the host is probably blocking it:
 - **Expiring / signed URL** (long `?token=`/`?expires=` query): it works for a while, then stops. You'll need a stable link from the host, or host the file yourself.

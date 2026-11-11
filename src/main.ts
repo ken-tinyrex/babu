@@ -35,7 +35,10 @@ async function boot() {
       timeout(3000, undefined),
     ]),
   ]);
-  if (added.length) catalog.shelves.unshift({ id: 'recent', label: 'Recently Added', items: added });
+  if (added.length) {
+    catalog.shelves.unshift({ id: 'recent', label: 'Recently Added', items: added });
+    catalog.featured = added.find((t) => t.poster || t.backdrop) ?? added[0];
+  }
   if (library) applyLibrary(library);
 
   const player = new Player();
