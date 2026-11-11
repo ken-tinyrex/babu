@@ -1,5 +1,6 @@
 import type { Title } from '../data/types';
 import { enrichTitle } from '../data/movieInfo';
+import type { Episode, Season } from '../jellyfin/client';
 import { suppressGhostClicks } from '../ghostClick';
 
 /** Tiny element helper; text is always set via textContent (API data is untrusted). */
@@ -61,7 +62,8 @@ export class Details {
     this.root.scrollTop = 0;
     this.root.querySelector<HTMLButtonElement>('.details__play')?.focus({ preventScroll: true });
 
-    // Usually instant (enriched at startup); re-render if new data arrives.
+    // Jellyfin titles already carry full details; others may get TMDB/Wikipedia data.
+    if (title.source.kind === 'jellyfin' || title.source.kind === 'jellyfin-series') return;
     await enrichTitle(title);
     if (token === this.token && this.isOpen) this.render(title);
   }
@@ -131,7 +133,9 @@ export class Details {
     play.addEventListener('click', () => this.onPlay?.(t));
     actions.append(play);
 
-    main.append(title, metaLine);
+    main.append(title);
+    if (t.subtitle) main.append(h('p', 'details__subtitle', t.subtitle));
+    main.append(metaLine);
     if (m.genres?.length) main.append(genres);
     if (m.tagline) main.append(h('p', 'details__tagline', m.tagline));
     main.append(actions, h('p', 'details__overview', t.description));
@@ -149,6 +153,16 @@ export class Details {
     body.append(posterBox, main);
 
     const sections: HTMLElement[] = [];
+
+    // Shows, and single episodes (so you can pick another episode of the same show).
+    const seriesId =
+      t.source.kind === 'jellyfin-series' ? t.source.seriesId : t.source.kind === 'jellyfin' ? t.source.seriesId : undefined;
+    if (seriesId) {
+      const sec = h('section', 'details__section');
+      sec.append(h('h2', '', 'Episodes'), h('p', 'details__muted', 'Loading episodes…'));
+      sections.push(sec);
+      void this.renderSeries(seriesId, sec, t.source.kind === 'jellyfin-series' ? play : null, this.token);
+    }
 
     if (m.cast?.length) {
       const sec = h('section', 'details__section');
@@ -196,5 +210,85 @@ export class Details {
 
     this.root.replaceChildren(close, hero, body, ...sections, credit);
     this.root.scrollTop = scrollTop;
+  }
+
+  /** Season picker + episode list for a Jellyfin show; Play becomes "Play S1:E3". */
+  private async renderSeries(seriesId: string, sec: HTMLElement, play: HTMLButtonElement | null, token: number) {
+    const { loadEpisodes, loadSeasons, nextEpisode } = await import('../jellyfin/client');
+    const alive = () => token === this.token && this.isOpen;
+
+    if (play) void nextEpisode(seriesId).then((ep) => {
+      if (!alive() || !ep) return;
+      play.textContent = `▶  Play ${ep.subtitle?.split(' · ')[0] ?? ''}`.trimEnd();
+      play.replaceWith(play.cloneNode(true));
+      const fresh = this.root.querySelector<HTMLButtonElement>('.details__play');
+      fresh?.addEventListener('click', () => this.onPlay?.(ep));
+    });
+
+    let seasons: Season[];
+    try {
+      seasons = await loadSeasons(seriesId);
+    } catch {
+      seasons = [];
+    }
+    if (!alive()) return;
+    if (!seasons.length) {
+      sec.replaceChildren(h('h2', '', 'Episodes'), h('p', 'details__muted', 'No episodes found.'));
+      return;
+    }
+
+    const picker = h('div', 'season-picker');
+    const list = h('ol', 'episodes');
+    sec.replaceChildren(h('h2', '', 'Episodes'), picker, list);
+
+    const show = async (i: number) => {
+      picker.querySelectorAll('button').forEach((b, j) => b.classList.toggle('is-active', j === i));
+      list.replaceChildren(h('li', 'details__muted', 'Loading…'));
+      let eps: Episode[] = [];
+      try {
+        eps = await loadEpisodes(seriesId, seasons[i].id);
+      } catch {
+        /* shown as empty */
+      }
+      if (!alive()) return;
+      list.replaceChildren(...(eps.length ? eps.map((e) => this.episodeItem(e)) : [h('li', 'details__muted', 'No episodes in this season.')]));
+    };
+
+    seasons.forEach((season, i) => {
+      const b = h('button', 'chip season-picker__btn', season.name);
+      b.type = 'button';
+      b.addEventListener('click', () => void show(i));
+      picker.append(b);
+    });
+    picker.hidden = seasons.length < 2;
+    await show(0);
+  }
+
+  private episodeItem(e: Episode): HTMLLIElement {
+    const li = h('li');
+    const btn = h('button', `episode${e.played ? ' is-played' : ''}`);
+    btn.type = 'button';
+    btn.setAttribute('aria-label', `Play ${e.title.subtitle ?? e.name}`);
+    btn.addEventListener('click', () => this.onPlay?.(e.title));
+
+    const thumb = h('div', 'episode__thumb');
+    if (e.thumb) thumb.style.backgroundImage = cssUrl(e.thumb);
+    if (e.progress > 0 && !e.played) {
+      const bar = h('div', 'episode__progress');
+      bar.style.setProperty('--p', `${Math.round(e.progress * 100)}%`);
+      thumb.append(bar);
+    }
+    if (e.played) thumb.append(h('span', 'episode__check', '✓'));
+
+    const text = h('div', 'episode__text');
+    const head = h('div', 'episode__head');
+    head.append(h('span', 'episode__name', `${e.number != null ? `${e.number}. ` : ''}${e.name}`));
+    if (e.runtime) head.append(h('span', 'episode__time', e.runtime));
+    text.append(head);
+    if (e.overview) text.append(h('p', 'episode__overview', e.overview));
+
+    btn.append(thumb, text);
+    li.append(btn);
+    return li;
   }
 }

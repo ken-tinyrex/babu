@@ -27,35 +27,68 @@ interface Gesture {
 export class HomeScreen extends Container {
   private content = new Container();
   private header: Header;
-  private hero: Hero;
-  private rows: Row[];
+  private hero!: Hero;
+  private rows: Row[] = [];
+  private play: (item: Title) => void;
+  private info: (item: Title) => void;
+  private activeTab = -1;
   private page = new Scroller();
   private gesture: Gesture | null = null;
   private dragged = false;
   private m!: Metrics;
 
+  /**
+   * @param tabs Home + one tab per Jellyfin library, each with its own hero and rows.
+   * @param onTabChange called after the user switches tabs (used to update the URL).
+   */
   constructor(
     private app: Application,
-    catalog: Catalog,
+    private tabs: { label: string; catalog: Catalog }[],
     onPlay: (item: Title) => void,
     onInfo: (item: Title) => void,
     mascot: Texture | null,
-    account?: { label: string; onTap: () => void },
+    initialTab = 0,
+    private onTabChange?: (index: number) => void,
   ) {
     super();
-    this.header = new Header(mascot, account);
     // Swallow taps that were really the end of a drag.
-    const play = (item: Title) => {
+    this.play = (item) => {
       if (!this.dragged) onPlay(item);
     };
-    const info = (item: Title) => {
+    this.info = (item) => {
       if (!this.dragged) onInfo(item);
     };
-    this.hero = new Hero(catalog.featured, play, info);
-    this.rows = catalog.shelves.map((s) => new Row(s, info));
-    this.content.addChild(this.hero, ...this.rows);
+    this.header = new Header(
+      mascot,
+      tabs.map((t) => t.label),
+      (i) => {
+        if (!this.dragged) this.selectTab(i);
+      },
+    );
     this.addChild(this.content, this.header);
     this.bindInput();
+    this.selectTab(initialTab, false);
+  }
+
+  /** Shows a tab's hero and rows and scrolls back to the top. */
+  selectTab(index: number, notify = true) {
+    const i = Math.max(0, Math.min(this.tabs.length - 1, index));
+    if (i === this.activeTab) return;
+    this.activeTab = i;
+    this.header.setActive(i);
+
+    const old = [this.hero, ...this.rows].filter(Boolean);
+    this.content.removeChildren();
+    for (const c of old) c.destroy({ children: true });
+
+    const catalog = this.tabs[i].catalog;
+    this.hero = new Hero(catalog.featured, this.play, this.info);
+    this.rows = catalog.shelves.map((s) => new Row(s, this.info));
+    this.content.addChild(this.hero, ...this.rows);
+    this.page.setBounds(0, 0);
+    this.page.value = 0;
+    if (this.m) this.layout();
+    if (notify) this.onTabChange?.(i);
   }
 
   layout() {

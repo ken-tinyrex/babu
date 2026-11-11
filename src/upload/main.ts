@@ -388,7 +388,7 @@ function resetForm() {
 function startEdit(t: Title) {
   editingId = t.id;
   current = structuredClone(t);
-  urlInput.value = t.source.kind === 'jellyfin' ? '' : t.source.url;
+  urlInput.value = t.source.kind === 'file' || t.source.kind === 'embed' ? t.source.url : '';
   titleInput.value = t.name;
   yearInput.value = t.year ? String(t.year) : '';
   $('results').hidden = true;

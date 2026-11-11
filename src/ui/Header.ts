@@ -2,26 +2,32 @@ import { Container, Graphics, Sprite, Text, type Texture } from 'pixi.js';
 import type { Insets } from '../safeArea';
 import { theme, type Metrics } from '../theme';
 
-const NAV = ['Home', 'Movies', 'Shows', 'My List'];
-
 /** How much of the mascot overlaps the top of the wordmark (paws resting on the letters). */
 const PERCH_OVERLAP = 0.22;
+/** Height of the second header row that holds the tabs on phones. */
+export const MOBILE_TABS_H = 38;
 
 const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 
+/**
+ * Top bar: Babu mascot + wordmark and the tabs (Home + one per Jellyfin library).
+ * Tabs sit beside the logo on tablet/desktop and on their own row on phones.
+ */
 export class Header extends Container {
   private bg = new Graphics();
   private brand = new Container();
   private logo: Text;
   private mascot: Sprite | null;
-  private nav: Text[];
+  private tabs: Text[];
+  private underline = new Graphics();
+  /** Dark band behind the phone tab row so labels stay readable over artwork. */
+  private tabsBg = new Graphics();
+  private active = 0;
   private time = 0;
   private mascotScale = 1;
-  private account = new Container();
-  private accountBg = new Graphics();
-  private accountText: Text;
+  private barH = 0;
 
-  constructor(mascotTexture: Texture | null, account?: { label: string; onTap: () => void }) {
+  constructor(mascotTexture: Texture | null, tabLabels: string[], onTab: (index: number) => void) {
     super();
     this.logo = new Text({
       text: 'Babu',
@@ -41,40 +47,58 @@ export class Header extends Container {
     this.brand.addChild(this.logo);
     if (this.mascot) this.brand.addChild(this.mascot);
 
-    this.nav = NAV.map((label, i) => {
+    // A single tab (just "Home") isn't worth showing.
+    const labels = tabLabels.length > 1 ? tabLabels : [];
+    this.tabs = labels.map((label, i) => {
       const t = new Text({
         text: label,
-        style: { fontFamily: theme.font, fontWeight: i === 0 ? '700' : '500', fill: i === 0 ? theme.text : theme.textMuted },
+        style: {
+          fontFamily: theme.font,
+          fontWeight: '600',
+          fill: theme.textMuted,
+          dropShadow: { color: 0x000000, alpha: 0.5, blur: 6, distance: 0 },
+        },
       });
       t.anchor.set(0, 0.5);
       t.eventMode = 'static';
       t.cursor = 'pointer';
+      // Generous hit area so tabs are easy to tap on phones.
+      t.hitArea = { contains: (x: number, y: number) => x >= -10 && x <= t.width + 10 && y >= -22 && y <= 22 };
+      t.on('pointertap', () => onTab(i));
       return t;
     });
-    // Account pill (top right): "Sign in" or the Jellyfin user's name.
-    this.accountText = new Text({
-      text: account?.label ?? '',
-      style: { fontFamily: theme.font, fontWeight: '700', fill: theme.text },
-    });
-    this.accountText.anchor.set(0.5);
-    this.account.addChild(this.accountBg, this.accountText);
-    this.account.visible = !!account;
-    this.account.eventMode = 'static';
-    this.account.cursor = 'pointer';
-    if (account) this.account.on('pointertap', account.onTap);
 
-    this.addChild(this.bg, this.brand, ...this.nav, this.account);
+    this.addChild(this.bg, this.tabsBg, this.brand, this.underline, ...this.tabs);
+    this.setActive(0);
+  }
+
+  /** Total height of the bar (taller on phones when tabs get their own row). */
+  get barHeight() {
+    return this.barH;
+  }
+
+  setActive(index: number) {
+    this.active = index;
+    this.tabs.forEach((t, i) => {
+      t.style.fill = i === index ? theme.text : theme.textMuted;
+      t.style.fontWeight = i === index ? '800' : '600';
+    });
+    this.drawUnderline();
   }
 
   layout(m: Metrics, width: number, safe: Insets) {
-    const h = m.headerH + safe.top;
+    const mobile = m.bp === 'mobile';
+    const tabsRow = mobile && this.tabs.length > 0;
+    this.barH = m.headerH + safe.top + (tabsRow ? MOBILE_TABS_H : 0);
     const left = m.gutter + safe.left;
-    const fontSize = m.bp === 'mobile' ? 24 : m.bp === 'tablet' ? 28 : 32;
+    const fontSize = mobile ? 24 : m.bp === 'tablet' ? 28 : 32;
 
-    this.bg.clear().rect(0, 0, width, h).fill(theme.bg);
+    this.bg.clear().rect(0, 0, width, this.barH).fill(theme.bg);
+    this.tabsBg.clear();
+    if (tabsRow) this.tabsBg.rect(0, safe.top + m.headerH - 6, width, MOBILE_TABS_H + 6).fill({ color: 0x000000, alpha: 0.55 });
     this.logo.style.fontSize = fontSize;
 
-    // Stack: mascot perched on top of the wordmark, block centered in the header bar.
+    // Stack: mascot perched on top of the wordmark, block centered in the logo row.
     const textH = this.logo.height;
     const capTop = textH * 0.18; // Text bounds include space above the cap height
     let mascotH = 0;
@@ -91,24 +115,42 @@ export class Header extends Container {
     this.logo.position.set(0, visibleMascot - capTop);
     this.mascot?.position.set(this.logo.width / 2, mascotH);
 
-    const navY = blockTop + this.logo.y + textH / 2;
+    if (tabsRow) {
+      // Own row under the logo; shrink the text if the libraries don't fit.
+      const avail = width - left - m.gutter - safe.right;
+      let size = 15;
+      let gap = 20;
+      const measure = () => {
+        for (const t of this.tabs) t.style.fontSize = size;
+        return this.tabs.reduce((w, t) => w + t.width, 0) + gap * (this.tabs.length - 1);
+      };
+      while (measure() > avail && size > 11) {
+        size -= 1;
+        gap = Math.max(12, gap - 2);
+      }
+      const y = safe.top + m.headerH + MOBILE_TABS_H / 2 - 6;
+      let x = left;
+      for (const t of this.tabs) {
+        t.position.set(x, y);
+        x += t.width + gap;
+      }
+    } else {
+      const navY = blockTop + this.logo.y + textH / 2;
+      let x = left + Math.max(this.logo.width, this.mascot?.width ?? 0) + (m.bp === 'desktop' ? 40 : 28);
+      for (const t of this.tabs) {
+        t.style.fontSize = m.bp === 'desktop' ? 16 : 15;
+        t.position.set(x, navY);
+        x += t.width + (m.bp === 'desktop' ? 28 : 20);
+      }
+    }
+    this.drawUnderline();
+  }
 
-    if (this.account.visible) {
-      this.accountText.style.fontSize = m.bp === 'mobile' ? 14 : 15;
-      const pw = Math.round(this.accountText.width + 28);
-      const ph = m.bp === 'mobile' ? 34 : 38;
-      this.accountBg.clear().roundRect(0, 0, pw, ph, ph / 2).fill({ color: 0xffffff, alpha: 0.14 }).stroke({ color: 0xffffff, alpha: 0.25, width: 1 });
-      this.accountText.position.set(pw / 2, ph / 2);
-      this.account.position.set(width - m.gutter - safe.right - pw, safe.top + (m.headerH - ph) / 2);
-    }
-    const showNav = m.bp !== 'mobile';
-    let x = left + Math.max(this.logo.width, this.mascot?.width ?? 0) + (m.bp === 'desktop' ? 40 : 28);
-    for (const t of this.nav) {
-      t.visible = showNav;
-      t.style.fontSize = m.bp === 'desktop' ? 16 : 15;
-      t.position.set(x, navY);
-      x += t.width + (m.bp === 'desktop' ? 28 : 20);
-    }
+  private drawUnderline() {
+    this.underline.clear();
+    const t = this.tabs[this.active];
+    if (!t || !t.width) return;
+    this.underline.roundRect(t.x, t.y + t.height / 2 + 4, t.width, 3, 1.5).fill(theme.accent);
   }
 
   /** Gentle breathing bob for the mascot. */

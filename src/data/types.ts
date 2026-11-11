@@ -8,7 +8,9 @@ export type VideoSource =
   | { kind: 'file'; url: string }
   | { kind: 'embed'; url: string }
   /** Streamed from the user's Jellyfin server (resolved at play time). */
-  | { kind: 'jellyfin'; itemId: string; resumeSeconds?: number };
+  | { kind: 'jellyfin'; itemId: string; resumeSeconds?: number; /** set for episodes */ seriesId?: string }
+  /** A Jellyfin TV show: Play starts its next episode. */
+  | { kind: 'jellyfin-series'; seriesId: string };
 
 export interface CastMember {
   name: string;
@@ -45,6 +47,8 @@ export interface MovieMeta {
 export interface Title {
   id: string;
   name: string;
+  /** Secondary line, e.g. "S1:E3 · Pilot" for an episode. */
+  subtitle?: string;
   description: string;
   year?: number;
   duration?: string;

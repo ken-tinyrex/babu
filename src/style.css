@@ -787,3 +787,141 @@ body {
     animation: none;
   }
 }
+
+/* ---------- Shows: subtitle, seasons, episodes ---------- */
+.details__subtitle {
+  margin: -2px 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #e6e6ee;
+}
+
+.details__muted {
+  color: #8f8fa3;
+  list-style: none;
+}
+
+.season-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.season-picker[hidden] {
+  display: none;
+}
+
+.season-picker__btn {
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.season-picker__btn.is-active {
+  background: #fff;
+  color: #000;
+  font-weight: 700;
+}
+
+.episodes {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.episode {
+  display: flex;
+  gap: 14px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.episode:hover,
+.episode:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.episode__thumb {
+  position: relative;
+  flex: none;
+  width: clamp(120px, 28vw, 220px);
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #1f1f2b center / cover no-repeat;
+}
+
+.episode__progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 4px;
+  background: linear-gradient(to right, var(--accent) 0 var(--p), rgba(255, 255, 255, 0.3) var(--p));
+}
+
+.episode__check {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.7);
+  font-size: 12px;
+}
+
+.episode.is-played .episode__thumb {
+  opacity: 0.6;
+}
+
+.episode__text {
+  min-width: 0;
+}
+
+.episode__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  align-items: baseline;
+}
+
+.episode__name {
+  font-weight: 700;
+}
+
+.episode__time {
+  font-size: 13px;
+  color: #8f8fa3;
+}
+
+.episode__overview {
+  display: -webkit-box;
+  margin: 4px 0 0;
+  overflow: hidden;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  font-size: 14px;
+  line-height: 1.45;
+  color: #c9c9d6;
+}
+
+@media (max-width: 639px) {
+  .episode__overview {
+    -webkit-line-clamp: 2;
+    font-size: 13px;
+  }
+}

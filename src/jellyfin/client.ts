@@ -152,6 +152,7 @@ interface JfPerson {
 interface JfItem {
   Id: string;
   Name: string;
+  Type?: string;
   Overview?: string;
   ProductionYear?: number;
   RunTimeTicks?: number;
@@ -160,14 +161,35 @@ interface JfItem {
   Genres?: string[];
   Taglines?: string[];
   People?: JfPerson[];
-  ImageTags?: { Primary?: string };
+  ImageTags?: { Primary?: string; Thumb?: string };
   BackdropImageTags?: string[];
-  UserData?: { PlaybackPositionTicks?: number; Played?: boolean };
+  UserData?: { PlaybackPositionTicks?: number; Played?: boolean; PlayedPercentage?: number };
+  // Episodes
+  SeriesId?: string;
+  SeriesName?: string;
+  SeasonId?: string;
+  IndexNumber?: number;
+  ParentIndexNumber?: number;
+  SeriesPrimaryImageTag?: string;
+  ParentBackdropItemId?: string;
+  ParentBackdropImageTags?: string[];
+  // Series
+  ChildCount?: number;
 }
 
-const FIELDS = 'Overview,Genres,People,Taglines,OfficialRating,CommunityRating,ProductionYear,RunTimeTicks';
+const FIELDS = 'Overview,Genres,People,Taglines,OfficialRating,CommunityRating,ProductionYear,RunTimeTicks,ChildCount';
 
 const PALETTE = [0x6c5ce7, 0x00b894, 0xe17055, 0x0984e3, 0xd63031, 0x00a8a8, 0xe84393, 0x3f6b52, 0x1d3557];
+
+const colorOf = (id: string) => {
+  let h = 0;
+  for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return PALETTE[h % PALETTE.length];
+};
+
+/** "S1:E3 · Episode name" */
+export const episodeLabel = (it: { ParentIndexNumber?: number; IndexNumber?: number; Name: string }) =>
+  `${it.ParentIndexNumber != null ? `S${it.ParentIndexNumber}:` : ''}${it.IndexNumber != null ? `E${it.IndexNumber}` : ''}${it.IndexNumber != null || it.ParentIndexNumber != null ? ' · ' : ''}${it.Name}`;
 
 function toTitle(s: Session, it: JfItem): Title {
   const img = (path: string) => `${s.server}${path}`;
@@ -185,22 +207,26 @@ function toTitle(s: Session, it: JfItem): Title {
     { label: 'Written by', value: crew('Writer') },
     { label: 'Produced by', value: crew('Producer') },
     { label: 'Music', value: crew('Composer') },
+    ...(it.Type === 'Series' && it.ChildCount ? [{ label: 'Seasons', value: String(it.ChildCount) }] : []),
   ].filter((f) => f.value);
 
-  let h = 0;
-  for (const ch of it.Id) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  const isEpisode = it.Type === 'Episode';
+  // Episodes use their show's poster and backdrop so rows stay consistent.
+  const posterId = isEpisode && it.SeriesId && it.SeriesPrimaryImageTag ? it.SeriesId : it.Id;
+  const posterTag = isEpisode && it.SeriesPrimaryImageTag ? it.SeriesPrimaryImageTag : it.ImageTags?.Primary;
+  const backdropId = it.BackdropImageTags?.[0] ? it.Id : it.ParentBackdropItemId;
+  const backdropTag = it.BackdropImageTags?.[0] ?? it.ParentBackdropImageTags?.[0];
 
   return {
     id: `jf-${it.Id}`,
-    name: it.Name,
+    name: isEpisode ? (it.SeriesName ?? it.Name) : it.Name,
+    subtitle: isEpisode ? episodeLabel(it) : undefined,
     description: it.Overview ?? '',
     year: it.ProductionYear,
     duration: it.RunTimeTicks ? formatRuntime(Math.round(it.RunTimeTicks / TICKS_PER_SECOND / 60)) : undefined,
-    color: PALETTE[h % PALETTE.length],
-    poster: it.ImageTags?.Primary ? img(`/Items/${it.Id}/Images/Primary?fillHeight=750&quality=90&tag=${it.ImageTags.Primary}`) : undefined,
-    backdrop: it.BackdropImageTags?.[0]
-      ? img(`/Items/${it.Id}/Images/Backdrop/0?fillWidth=1600&quality=85&tag=${it.BackdropImageTags[0]}`)
-      : undefined,
+    color: colorOf(it.SeriesId ?? it.Id),
+    poster: posterTag ? img(`/Items/${posterId}/Images/Primary?fillHeight=750&quality=90&tag=${posterTag}`) : undefined,
+    backdrop: backdropId && backdropTag ? img(`/Items/${backdropId}/Images/Backdrop/0?fillWidth=1600&quality=85&tag=${backdropTag}`) : undefined,
     meta: {
       tagline: it.Taglines?.[0],
       genres: it.Genres?.slice(0, 4),
@@ -210,37 +236,142 @@ function toTitle(s: Session, it: JfItem): Title {
       cast,
       facts,
     },
-    source: { kind: 'jellyfin', itemId: it.Id, resumeSeconds: (it.UserData?.PlaybackPositionTicks ?? 0) / TICKS_PER_SECOND || undefined },
+    source:
+      it.Type === 'Series'
+        ? { kind: 'jellyfin-series', seriesId: it.Id }
+        : {
+            kind: 'jellyfin',
+            itemId: it.Id,
+            resumeSeconds: (it.UserData?.PlaybackPositionTicks ?? 0) / TICKS_PER_SECOND || undefined,
+            seriesId: isEpisode ? it.SeriesId : undefined,
+          },
   };
 }
 
-export interface Library {
+/** A Jellyfin library ("Anime", "Kids", "Movies", "TV Shows"). */
+export interface LibraryView {
+  id: string;
+  name: string;
+  type: 'movies' | 'tvshows';
+}
+
+export interface ViewContent {
+  view: LibraryView;
+  /** In-progress movies or episodes. */
   resume: Title[];
+  /** Next episode to watch per show (TV libraries). */
+  nextUp: Title[];
+  /** Movies or shows, newest first. */
   latest: Title[];
   byGenre: { genre: string; items: Title[] }[];
 }
 
-export async function loadLibrary(s: Session): Promise<Library> {
+export interface Library {
+  views: ViewContent[];
+}
+
+function genreRows(items: Title[], min: number) {
+  const counts = new Map<string, Title[]>();
+  for (const t of items) for (const g of t.meta?.genres ?? []) counts.set(g, [...(counts.get(g) ?? []), t]);
+  return [...counts.entries()]
+    .filter(([, list]) => list.length >= min)
+    .sort((a, b) => b[1].length - a[1].length)
+    .slice(0, 4)
+    .map(([genre, list]) => ({ genre, items: list }));
+}
+
+async function loadView(s: Session, view: LibraryView): Promise<ViewContent> {
   const common = `userId=${s.userId}&fields=${FIELDS}&enableUserData=true&imageTypeLimit=1&enableImageTypes=Primary,Backdrop`;
-  const [resume, all] = await Promise.all([
-    api<{ Items: JfItem[] }>(s, `/UserItems/Resume?${common}&mediaTypes=Video&includeItemTypes=Movie&limit=20`).catch(() => ({ Items: [] })),
+  const itemType = view.type === 'movies' ? 'Movie' : 'Series';
+  const [resume, nextUp, all] = await Promise.all([
+    api<{ Items: JfItem[] }>(s, `/UserItems/Resume?${common}&parentId=${view.id}&mediaTypes=Video&limit=20`).catch(() => ({ Items: [] })),
+    view.type === 'tvshows'
+      ? api<{ Items: JfItem[] }>(s, `/Shows/NextUp?${common}&parentId=${view.id}&limit=20&enableResumable=false`).catch(() => ({ Items: [] }))
+      : Promise.resolve({ Items: [] as JfItem[] }),
     api<{ Items: JfItem[] }>(
       s,
-      `/Items?${common}&includeItemTypes=Movie&recursive=true&sortBy=DateCreated&sortOrder=Descending&limit=300`,
+      `/Items?${common}&parentId=${view.id}&includeItemTypes=${itemType}&recursive=true&sortBy=DateCreated&sortOrder=Descending&limit=300`,
     ),
   ]);
   const latest = all.Items.map((it) => toTitle(s, it));
+  return {
+    view,
+    resume: resume.Items.map((it) => toTitle(s, it)),
+    nextUp: nextUp.Items.map((it) => toTitle(s, it)),
+    latest,
+    byGenre: genreRows(latest, view.type === 'movies' ? 3 : 2),
+  };
+}
 
-  // Up to 4 genre rows, biggest first (each needs 3+ movies).
-  const counts = new Map<string, Title[]>();
-  for (const t of latest) for (const g of t.meta?.genres ?? []) counts.set(g, [...(counts.get(g) ?? []), t]);
-  const byGenre = [...counts.entries()]
-    .filter(([, items]) => items.length >= 3)
-    .sort((a, b) => b[1].length - a[1].length)
-    .slice(0, 4)
-    .map(([genre, items]) => ({ genre, items }));
+/** Every movie/TV library the user can see, in Jellyfin's order, with its rows. */
+export async function loadLibrary(s: Session): Promise<Library> {
+  const views = await api<{ Items: { Id: string; Name: string; CollectionType?: string }[] }>(s, `/UserViews?userId=${s.userId}`);
+  const libs: LibraryView[] = views.Items.filter((v) => v.CollectionType === 'movies' || v.CollectionType === 'tvshows').map(
+    (v) => ({ id: v.Id, name: v.Name, type: v.CollectionType as LibraryView['type'] }),
+  );
+  const contents = await Promise.all(libs.map((v) => loadView(s, v).catch(() => null)));
+  return { views: contents.filter((c): c is ViewContent => c !== null) };
+}
 
-  return { resume: resume.Items.map((it) => toTitle(s, it)), latest, byGenre };
+// ---------- shows: seasons, episodes, next up ----------
+
+export interface Season {
+  id: string;
+  name: string;
+}
+
+export interface Episode {
+  title: Title;
+  name: string;
+  number?: number;
+  season?: number;
+  overview: string;
+  runtime?: string;
+  thumb?: string;
+  played: boolean;
+  /** 0..1 watched, for a progress bar. */
+  progress: number;
+}
+
+export async function loadSeasons(seriesId: string): Promise<Season[]> {
+  const s = await activeSession();
+  if (!s) return [];
+  const d = await api<{ Items: { Id: string; Name: string }[] }>(s, `/Shows/${seriesId}/Seasons?userId=${s.userId}`);
+  return d.Items.map((x) => ({ id: x.Id, name: x.Name }));
+}
+
+export async function loadEpisodes(seriesId: string, seasonId: string): Promise<Episode[]> {
+  const s = await activeSession();
+  if (!s) return [];
+  const d = await api<{ Items: JfItem[] }>(
+    s,
+    `/Shows/${seriesId}/Episodes?userId=${s.userId}&seasonId=${seasonId}&fields=Overview,RunTimeTicks&enableUserData=true&enableImageTypes=Primary,Thumb,Backdrop&imageTypeLimit=1`,
+  );
+  return d.Items.map((it) => {
+    const tag = it.ImageTags?.Primary;
+    return {
+      title: toTitle(s, it),
+      name: it.Name,
+      number: it.IndexNumber,
+      season: it.ParentIndexNumber,
+      overview: it.Overview ?? '',
+      runtime: it.RunTimeTicks ? formatRuntime(Math.round(it.RunTimeTicks / TICKS_PER_SECOND / 60)) : undefined,
+      thumb: tag ? `${s.server}/Items/${it.Id}/Images/Primary?fillWidth=480&quality=85&tag=${tag}` : undefined,
+      played: !!it.UserData?.Played,
+      progress: (it.UserData?.PlayedPercentage ?? 0) / 100,
+    };
+  });
+}
+
+/** The episode "Play" should start: Jellyfin's Next Up for the show, else its first episode. */
+export async function nextEpisode(seriesId: string): Promise<Title | null> {
+  const s = await activeSession();
+  if (!s) return null;
+  const common = `userId=${s.userId}&fields=${FIELDS}&enableUserData=true&imageTypeLimit=1&enableImageTypes=Primary,Backdrop`;
+  const next = await api<{ Items: JfItem[] }>(s, `/Shows/NextUp?${common}&seriesId=${seriesId}&limit=1&enableResumable=true`).catch(() => ({ Items: [] }));
+  if (next.Items[0]) return toTitle(s, next.Items[0]);
+  const first = await api<{ Items: JfItem[] }>(s, `/Shows/${seriesId}/Episodes?${common}&limit=1`);
+  return first.Items[0] ? toTitle(s, first.Items[0]) : null;
 }
 
 // ---------- playback ----------

@@ -100,7 +100,11 @@ export class Hero extends Container {
       style: { fontFamily: theme.font, fontWeight: '800', fill: theme.text, wordWrap: true, dropShadow: { color: 0x000000, alpha: 0.6, blur: 8, distance: 0 } },
     });
     this.meta = new Text({
-      text: [item.year, m?.certification, item.duration, m?.genres?.slice(0, 2).join(', ')].filter(Boolean).join('  ·  '),
+      // Episodes lead with "S1:E2 · Title"; movies and shows with year and rating.
+      text: (item.subtitle
+        ? [item.subtitle, item.duration]
+        : [item.year, m?.certification, item.duration, m?.genres?.slice(0, 2).join(', ')]
+      ).filter(Boolean).join('  ·  '),
       style: { fontFamily: theme.font, fontWeight: '600', fill: 0xd6d6e0, dropShadow: { color: 0x000000, alpha: 0.6, blur: 8, distance: 0 } },
     });
     this.body = new Text({

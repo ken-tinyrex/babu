@@ -2,9 +2,9 @@ import { Application, Assets, type Texture } from 'pixi.js';
 import { allTitles, catalog } from './data/catalog';
 import { enrichTitle } from './data/movieInfo';
 import { loadUserTitles } from './data/userTitles';
-import type { Shelf, Title } from './data/types';
+import type { Catalog, Shelf, Title } from './data/types';
 import { Details } from './details/Details';
-import { activeSession, loadLibrary, type Library } from './jellyfin/client';
+import { activeSession, loadLibrary, type Library, type ViewContent } from './jellyfin/client';
 import { Player } from './player/Player';
 import { theme } from './theme';
 import { HomeScreen } from './ui/HomeScreen';
@@ -39,18 +39,24 @@ async function boot() {
     catalog.shelves.unshift({ id: 'recent', label: 'Recently Added', items: added });
     catalog.featured = added.find((t) => t.poster || t.backdrop) ?? added[0];
   }
-  if (library) applyLibrary(library);
+  const tabs = buildTabs(library);
+  const slugs = tabs.map((t) => slug(t.label));
+  const tabFromHash = () => Math.max(0, slugs.indexOf(location.hash.slice(1)));
 
   const player = new Player();
   const details = new Details();
   details.onPlay = (item) => void player.open(item);
   const home = new HomeScreen(
     app,
-    catalog,
+    tabs,
     (item) => void player.open(item),
     (item) => void details.open(item),
     mascot,
+    tabFromHash(),
+    (i) => history.pushState(null, '', i === 0 ? location.pathname : `#${slugs[i]}`),
   );
+  // Back/forward buttons switch tabs too.
+  window.addEventListener('popstate', () => home.selectTab(tabFromHash(), false));
   app.stage.addChild(home);
 
   home.layout();
@@ -77,23 +83,57 @@ async function loadJellyfin(): Promise<Library | null> {
   }
 }
 
+const slug = (label: string) => label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+const shelf = (id: string, label: string, items: Title[]): Shelf[] =>
+  items.length ? [{ id, label, items: items.slice(0, 30) }] : [];
+
+const heroOf = (...lists: Title[][]) => lists.flat().find((t) => t.backdrop) ?? lists.flat().find((t) => t.poster);
+
+/** Rows for one Jellyfin library tab (Anime, Kids, Movies, TV Shows…). */
+function libraryCatalog(v: ViewContent): Catalog {
+  const shows = v.view.type === 'tvshows';
+  const shelves: Shelf[] = [
+    ...shelf(`${v.view.id}-resume`, 'Continue Watching', v.resume),
+    ...shelf(`${v.view.id}-next`, 'Next Up', v.nextUp),
+    ...shelf(`${v.view.id}-latest`, shows ? 'Recently Added Shows' : 'Recently Added', v.latest),
+    ...v.byGenre.map((g) => ({ id: `${v.view.id}-g-${g.genre}`, label: g.genre, items: g.items.slice(0, 30) })),
+  ];
+  const featured =
+    heroOf(v.resume, v.latest) ??
+    ({
+      id: `demo-empty-${v.view.id}`,
+      name: v.view.name,
+      description: `Nothing in ${v.view.name} yet. Add some in Jellyfin and it will show up here.`,
+      color: 0x3f6b52,
+      source: { kind: 'file', url: '' },
+    } satisfies Title);
+  return { featured, shelves };
+}
+
 /**
- * Puts the Jellyfin library on the homepage: Continue Watching, newest additions and genre rows
- * go first, the newest movie with artwork becomes the hero, and placeholder demo titles are removed.
+ * Tabs: Home (everything) + one per Jellyfin library, in Jellyfin's order.
+ * Without Jellyfin, just Home with the /upload movies and demo rows.
  */
-function applyLibrary(lib: Library) {
-  if (!lib.latest.length) return;
+function buildTabs(lib: Library | null): { label: string; catalog: Catalog }[] {
+  if (!lib?.views.length) return [{ label: 'Home', catalog }];
+
   const isDemo = (t: Title) => t.id.startsWith('demo-');
-  const rest = catalog.shelves
+  const uploaded = catalog.shelves
     .map((s) => ({ ...s, items: s.items.filter((t) => !isDemo(t)) }))
     .filter((s) => s.items.length);
-  const jf: Shelf[] = [
-    ...(lib.resume.length ? [{ id: 'jf-resume', label: 'Continue Watching', items: lib.resume }] : []),
-    { id: 'jf-latest', label: 'New in Your Library', items: lib.latest.slice(0, 30) },
-    ...lib.byGenre.map((g) => ({ id: `jf-genre-${g.genre}`, label: g.genre, items: g.items.slice(0, 30) })),
-  ];
-  catalog.shelves = [...jf, ...rest];
-  catalog.featured = lib.resume.find((t) => t.backdrop) ?? lib.latest.find((t) => t.backdrop) ?? catalog.featured;
+  const allResume = lib.views.flatMap((v) => v.resume);
+  const allNext = lib.views.flatMap((v) => v.nextUp);
+  const home: Catalog = {
+    featured: heroOf(allResume, ...lib.views.map((v) => v.latest)) ?? catalog.featured,
+    shelves: [
+      ...shelf('home-resume', 'Continue Watching', allResume),
+      ...shelf('home-next', 'Next Up', allNext),
+      ...lib.views.flatMap((v) => shelf(`home-${v.view.id}`, `New in ${v.view.name}`, v.latest)),
+      ...uploaded,
+    ],
+  };
+  return [{ label: 'Home', catalog: home }, ...lib.views.map((v) => ({ label: v.view.name, catalog: libraryCatalog(v) }))];
 }
 
 function hideBootLoader() {

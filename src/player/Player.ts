@@ -82,13 +82,27 @@ export class Player {
     suppressGhostClicks();
     this.teardown();
     this.session = new AbortController();
-    this.titleEl.textContent = title.name;
+    this.titleEl.textContent = title.subtitle ? `${title.name} — ${title.subtitle}` : title.name;
     this.root.hidden = false;
     this.onOpen?.();
 
     const loader = createLoader('Babu is fetching…');
     this.stage.append(loader);
     const setLoading = (on: boolean) => loader.classList.toggle('is-visible', on);
+
+    if (title.source.kind === 'jellyfin-series') {
+      // A show: play its next episode (Jellyfin's Next Up, else the first one).
+      try {
+        const { nextEpisode } = await import('../jellyfin/client');
+        const ep = await nextEpisode(title.source.seriesId);
+        if (token !== this.token) return;
+        if (!ep) return this.showError('This show has no episodes yet.');
+        title = ep;
+        this.titleEl.textContent = ep.subtitle ? `${ep.name} — ${ep.subtitle}` : ep.name;
+      } catch (err) {
+        return this.showError((err as Error).message || 'Couldn’t find an episode to play.');
+      }
+    }
 
     if (title.source.kind === 'embed') {
       if (!/^https:\/\//i.test(title.source.url)) return this.showError('Embed URL must use https.');
@@ -119,9 +133,11 @@ export class Player {
       } catch (err) {
         return this.showError((err as Error).message || 'Jellyfin could not start this movie.');
       }
-    } else {
+    } else if (title.source.kind === 'file') {
       url = title.source.url;
       hlsStream = isHls(url);
+    } else {
+      return this.showError('Nothing to play.');
     }
 
     const video = document.createElement('video');
